@@ -19,6 +19,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import com.example.pdfscanner.decodeScaledBitmap
+import com.example.pdfscanner.image.rotateBitmapQuarterTurns
+import com.example.pdfscanner.image.applyBitmapFilter
 import com.example.pdfscanner.image.warpBitmapWithQuad
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

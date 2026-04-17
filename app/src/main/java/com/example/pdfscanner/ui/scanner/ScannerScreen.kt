@@ -1,8 +1,19 @@
 package com.example.pdfscanner.ui.scanner
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.PointF
 import android.net.Uri
 import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
@@ -46,11 +57,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -65,43 +78,168 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
+import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
+import com.example.pdfscanner.camera.DocumentCornerDetector
 import com.example.pdfscanner.decodeScaledBitmap
 import com.example.pdfscanner.image.BitmapMemoryCache
 import com.example.pdfscanner.image.fullImageBounds
+import com.example.pdfscanner.image.orderCorners
 import com.example.pdfscanner.image.warpBitmapWithQuad
+import java.io.File
+import java.io.FileOutputStream
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun ScannerScreen(
-        hasCameraPermission: Boolean,
-        capturedPageUris: List<Uri>,
-        detectedCorners: List<PointF>?,
-        imageAspectRatio: Float,
-        isBusy: Boolean,
-        errorMessage: String?,
-        onCameraPreviewReady: (PreviewView) -> Unit,
-        onRequestPermission: () -> Unit,
-        onCapturePage: () -> Unit,
-        onSavePdf: () -> Unit,
-        onOpenGallery: (Int) -> Unit,
-        onClearPages: () -> Unit,
-        onDismissError: () -> Unit,
-        onReorderPages: (fromIndex: Int, toIndex: Int) -> Unit,
-        onRemovePage: (index: Int) -> Unit,
+        viewModel: ScannerViewModel,
+        onOpenEditor: (Int) -> Unit,
         scrollToIndexHint: Int? = null,
         onScrollHintConsumed: () -> Unit = {},
-        cropBoundsByUri: Map<String, List<PointF>> = emptyMap(),
         sharedTransitionScope: SharedTransitionScope? = null,
         animatedVisibilityScope: AnimatedVisibilityScope? = null,
         sharedElementKeyForUri: (Uri) -> String = { uri -> "page-$uri" }
 ) {
     var pendingDeleteIndex by remember { mutableStateOf<Int?>(null) }
+    val pages = viewModel.pages
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val coroutineScope = rememberCoroutineScope()
+    val detector = remember { DocumentCornerDetector() }
+    val pdfStorage = remember(context) { ScannerPdfStorage(context) }
+    val analyzerExecutor = remember { Executors.newSingleThreadExecutor() }
+
+    DisposableEffect(Unit) {
+        onDispose { analyzerExecutor.shutdown() }
+    }
+
+    var hasCameraPermission by remember { mutableStateOf(isCameraPermissionGranted(context)) }
+    var previewView by remember { mutableStateOf<PreviewView?>(null) }
+    var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
+    var detectedCorners by remember { mutableStateOf<List<PointF>?>(null) }
+    var imageAspectRatio by remember { mutableFloatStateOf(0.75f) }
+    var scannerErrorMessage by remember { mutableStateOf<String?>(null) }
+    var isScannerBusy by remember { mutableStateOf(false) }
+    val isScreenBusy = viewModel.isSavingPdf || isScannerBusy
+    val currentDetectedCorners by rememberUpdatedState(detectedCorners)
+
+    val requestCameraPermissionLauncher =
+            rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+                hasCameraPermission = granted
+                if (!granted) {
+                    scannerErrorMessage = "Camera permission is required to scan documents."
+                } else {
+                    scannerErrorMessage = null
+                }
+            }
+
+    val pickImagesLauncher =
+            rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+                if (uris.isEmpty()) return@rememberLauncherForActivityResult
+                isScannerBusy = true
+                coroutineScope.launch {
+                    val copiedUris = withContext(Dispatchers.IO) {
+                        uris.mapNotNull { uri -> copyUriToCache(context, uri) }
+                    }
+                    copiedUris.forEach { uri -> viewModel.addPage(uri) }
+                    if (copiedUris.isEmpty()) {
+                        scannerErrorMessage = "Unable to import selected images."
+                    }
+                    isScannerBusy = false
+                }
+            }
+
+    LaunchedEffect(hasCameraPermission) {
+        if (!hasCameraPermission) {
+            requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    LaunchedEffect(previewView, hasCameraPermission, lifecycleOwner) {
+        val targetPreviewView = previewView
+        if (!hasCameraPermission || targetPreviewView == null) {
+            imageCapture = null
+            detectedCorners = null
+            return@LaunchedEffect
+        }
+
+        bindCameraPreview(
+                context = context,
+                lifecycleOwner = lifecycleOwner,
+                detector = detector,
+                analyzerExecutor = analyzerExecutor,
+                previewView = targetPreviewView,
+                onImageCaptureReady = { captureUseCase -> imageCapture = captureUseCase },
+                onCornersUpdated = { corners, aspect ->
+                    if (corners != null && aspect != null) {
+                        detectedCorners = corners
+                        imageAspectRatio = aspect
+                    } else {
+                        detectedCorners = null
+                    }
+                },
+                onError = { message -> scannerErrorMessage = message }
+        )
+    }
+
+    fun capturePage() {
+        if (!hasCameraPermission) {
+            scannerErrorMessage = "Camera permission is required to capture pages."
+            return
+        }
+
+        val captureUseCase = imageCapture
+        if (captureUseCase == null) {
+            scannerErrorMessage = "Camera is not ready yet."
+            return
+        }
+
+        val cacheDirectory = File(context.cacheDir, "captured_pages")
+        if (!cacheDirectory.exists() && !cacheDirectory.mkdirs()) {
+            scannerErrorMessage = "Unable to create cache directory for captured pages."
+            return
+        }
+
+        isScannerBusy = true
+        scannerErrorMessage = null
+        val outputFile = File(cacheDirectory, "page_${System.currentTimeMillis()}.jpg")
+        val outputOptions = ImageCapture.OutputFileOptions.Builder(outputFile).build()
+
+        captureUseCase.takePicture(
+                outputOptions,
+                ContextCompat.getMainExecutor(context),
+                object : ImageCapture.OnImageSavedCallback {
+                    override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                        val savedUri = outputFile.toUri()
+                        val initialBounds = sanitizeInitialBounds(
+                                currentDetectedCorners
+                                        ?.takeIf { it.size == 4 }
+                                        ?.let { orderCorners(it) }
+                        )
+                        viewModel.addPage(savedUri, initialBounds)
+                        isScannerBusy = false
+                    }
+
+                    override fun onError(exception: ImageCaptureException) {
+                        isScannerBusy = false
+                        scannerErrorMessage = exception.message ?: "Failed to capture page."
+                        Log.e("CapturePage", "ImageCapture error: ${exception.message}", exception)
+                    }
+                }
+        )
+    }
+
+    val visibleErrorMessage = scannerErrorMessage ?: viewModel.saveErrorMessage
 
     if (!hasCameraPermission) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -110,7 +248,9 @@ fun ScannerScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text("Camera permission is required.")
-                Button(onClick = onRequestPermission) { Text("Grant permission") }
+                Button(onClick = { requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA) }) {
+                    Text("Grant permission")
+                }
             }
         }
         return
@@ -119,7 +259,7 @@ fun ScannerScreen(
     Column(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
             CameraPreview(
-                    onCameraPreviewReady = onCameraPreviewReady,
+                    onCameraPreviewReady = { preview -> previewView = preview },
                     modifier =
                             Modifier.fillMaxSize()
                                     .clip(
@@ -184,7 +324,7 @@ fun ScannerScreen(
             }
 
             // Top error message
-            errorMessage?.let { message ->
+            visibleErrorMessage?.let { message ->
                 Surface(
                         modifier =
                                 Modifier.align(Alignment.TopCenter)
@@ -198,7 +338,15 @@ fun ScannerScreen(
                                 modifier = Modifier.padding(16.dp),
                                 color = MaterialTheme.colorScheme.onErrorContainer
                         )
-                        IconButton(onClick = onDismissError) {
+                        IconButton(
+                                onClick = {
+                                    if (scannerErrorMessage != null) {
+                                        scannerErrorMessage = null
+                                    } else {
+                                        viewModel.dismissSaveError()
+                                    }
+                                }
+                        ) {
                             Icon(Icons.Default.Close, contentDescription = "Dismiss error")
                         }
                     }
@@ -239,7 +387,9 @@ fun ScannerScreen(
                             Modifier.size(56.dp)
                                     .clip(CircleShape)
                                     .background(Color(0xFF005A8D))
-                                    .clickable { onOpenGallery(-1) },
+                                    .clickable(enabled = !isScreenBusy) {
+                                        pickImagesLauncher.launch("image/*")
+                                    },
                     contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -258,22 +408,24 @@ fun ScannerScreen(
                                     .padding(8.dp)
                                     .clip(CircleShape)
                                     .background(Color.White)
-                                    .clickable(enabled = !isBusy) { onCapturePage() }
+                                    .clickable(enabled = !isScreenBusy) { capturePage() }
             )
 
             // Right action button
             Box(
                     modifier =
                             Modifier.size(56.dp).clickable(
-                                            enabled = !isBusy && capturedPageUris.isNotEmpty()
-                                    ) { onSavePdf() },
+                                            enabled = !isScreenBusy && pages.isNotEmpty()
+                                    ) {
+                                        viewModel.savePagesAsPdf(context, pdfStorage)
+                                    },
                     contentAlignment = Alignment.Center
             ) {
                 // A custom shape similar to the screenshot
                 Icon(
                         Icons.Default.Check,
                         contentDescription = "Save PDF",
-                        tint = if (capturedPageUris.isNotEmpty()) Color(0xFF67B5E8) else Color.Gray,
+                        tint = if (pages.isNotEmpty()) Color(0xFF67B5E8) else Color.Gray,
                         modifier = Modifier.size(40.dp)
                 )
             }
@@ -284,20 +436,19 @@ fun ScannerScreen(
         var draggingIndex by remember { mutableStateOf<Int?>(null) }
         var dragOffsetX by remember { mutableFloatStateOf(0f) }
         var isSettling by remember { mutableStateOf(false) }
-        val currentOnReorderPages by rememberUpdatedState(onReorderPages)
 
-        LaunchedEffect(scrollToIndexHint, capturedPageUris.size) {
+        LaunchedEffect(scrollToIndexHint, pages.size) {
             val target = scrollToIndexHint
-            if (target != null && target in capturedPageUris.indices) {
+            if (target != null && target in pages.indices) {
                 lazyListState.scrollToItem(target)
                 onScrollHintConsumed()
             }
         }
 
         // Auto-scroll to the last item whenever a new page is captured
-        LaunchedEffect(capturedPageUris.size) {
-            if (capturedPageUris.isNotEmpty()) {
-                lazyListState.animateScrollToItem(capturedPageUris.size - 1)
+        LaunchedEffect(pages.size) {
+            if (pages.isNotEmpty()) {
+                lazyListState.animateScrollToItem(pages.size - 1)
             }
         }
 
@@ -373,7 +524,7 @@ fun ScannerScreen(
                                                             (draggingItemInfo.offset -
                                                                             target.offset)
                                                                     .toFloat()
-                                                    currentOnReorderPages(
+                                                    viewModel.reorderPages(
                                                             currentIndex,
                                                             target.index
                                                     )
@@ -386,14 +537,15 @@ fun ScannerScreen(
                                 },
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(capturedPageUris, key = { it.toString() }) { uri ->
-                val pageIndex = capturedPageUris.indexOf(uri)
+            items(pages, key = { it.uri.toString() }) { pageState ->
+                val uri = pageState.uri
+                val pageIndex = pages.indexOf(pageState)
                 val isDragging = draggingIndex == pageIndex
+                val bounds = pageState.cropBounds
                 var imageBitmap by remember(uri) { mutableStateOf<ImageBitmap?>(null) }
                 var hasError by remember(uri) { mutableStateOf(false) }
                 val context = LocalContext.current
                 val cacheKey = uri.toString()
-                val bounds = cropBoundsByUri[cacheKey] ?: fullImageBounds()
                 val thumbnailCacheKey = "$cacheKey-thumb-${bounds.hashCode()}"
 
                 LaunchedEffect(uri, bounds) {
@@ -502,7 +654,7 @@ fun ScannerScreen(
                                         .background(Color.DarkGray)
                                         .clickable(enabled = !hasError && !isDragging) {
                                             if (pageIndex >= 0) {
-                                                onOpenGallery(pageIndex)
+                                                onOpenEditor(pageIndex)
                                             }
                                         }
                 ) {
@@ -566,7 +718,7 @@ fun ScannerScreen(
     } // Column (main background container)
 
     // Overlays for the whole screen
-    if (isBusy) {
+    if (isScreenBusy) {
         Box(
                 modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)),
                 contentAlignment = Alignment.Center
@@ -581,8 +733,8 @@ fun ScannerScreen(
                 confirmButton = {
                     TextButton(
                             onClick = {
-                                if (index in capturedPageUris.indices) {
-                                    onRemovePage(index)
+                                if (index in pages.indices) {
+                                    viewModel.removePage(index)
                                 }
                                 pendingDeleteIndex = null
                             }
@@ -604,4 +756,162 @@ fun CameraPreview(onCameraPreviewReady: (PreviewView) -> Unit, modifier: Modifie
                 PreviewView(context).also { previewView -> onCameraPreviewReady(previewView) }
             }
     )
+}
+
+private fun isCameraPermissionGranted(context: Context): Boolean {
+    return ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.CAMERA
+    ) == PackageManager.PERMISSION_GRANTED
+}
+
+private fun bindCameraPreview(
+        context: Context,
+        lifecycleOwner: androidx.lifecycle.LifecycleOwner,
+        detector: DocumentCornerDetector,
+        analyzerExecutor: ExecutorService,
+        previewView: PreviewView,
+        onImageCaptureReady: (ImageCapture) -> Unit,
+        onCornersUpdated: (List<PointF>?, Float?) -> Unit,
+        onError: (String) -> Unit
+) {
+    val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+    cameraProviderFuture.addListener(
+            {
+                val cameraProvider = cameraProviderFuture.get()
+                val preview = Preview.Builder()
+                        .setTargetAspectRatio(androidx.camera.core.AspectRatio.RATIO_4_3)
+                        .build()
+                        .also { it.setSurfaceProvider(previewView.surfaceProvider) }
+
+                val imageCapture = ImageCapture.Builder()
+                        .setTargetAspectRatio(androidx.camera.core.AspectRatio.RATIO_4_3)
+                        .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                        .build()
+                onImageCaptureReady(imageCapture)
+
+                val imageAnalysis = ImageAnalysis.Builder()
+                        .setTargetAspectRatio(androidx.camera.core.AspectRatio.RATIO_4_3)
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .build()
+
+                var lastDetectedCorners: List<PointF>? = null
+                var lastAspectRatio: Float? = null
+                var strikeOutCount = 0
+
+                imageAnalysis.setAnalyzer(analyzerExecutor) { imageProxy ->
+                    try {
+                        val result = detector.detectDocumentCorners(imageProxy)
+                        val smoothedResult = if (result != null) {
+                            strikeOutCount = 0
+                            val (rawCorners, aspect) = result
+                            val sorted = detector.sortCornersClockwise(rawCorners)
+                            val currentLast = lastDetectedCorners
+                            val smoothed = if (currentLast != null && currentLast.size == 4) {
+                                sorted.mapIndexed { index, newPt ->
+                                    val oldPt = currentLast[index]
+                                    PointF(
+                                            oldPt.x * 0.7f + newPt.x * 0.3f,
+                                            oldPt.y * 0.7f + newPt.y * 0.3f
+                                    )
+                                }
+                            } else {
+                                sorted
+                            }
+
+                            lastDetectedCorners = smoothed
+                            lastAspectRatio = aspect
+                            Pair(smoothed, aspect)
+                        } else {
+                            strikeOutCount++
+                            if (strikeOutCount > 5) {
+                                lastDetectedCorners = null
+                                null
+                            } else {
+                                val corners = lastDetectedCorners
+                                val aspect = lastAspectRatio
+                                if (corners != null && aspect != null) Pair(corners, aspect) else null
+                            }
+                        }
+
+                        ContextCompat.getMainExecutor(context).execute {
+                            if (smoothedResult != null) {
+                                onCornersUpdated(smoothedResult.first, smoothedResult.second)
+                            } else {
+                                onCornersUpdated(null, null)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("detectDocumentCorners", "Error locating document corners", e)
+                    } finally {
+                        imageProxy.close()
+                    }
+                }
+
+                try {
+                    cameraProvider.unbindAll()
+                    cameraProvider.bindToLifecycle(
+                            lifecycleOwner,
+                            CameraSelector.DEFAULT_BACK_CAMERA,
+                            preview,
+                            imageCapture,
+                            imageAnalysis
+                    )
+                } catch (error: IllegalStateException) {
+                    onError("Unable to bind camera: ${error.message ?: "unknown error"}")
+                } catch (error: IllegalArgumentException) {
+                    onError("Unable to bind camera: ${error.message ?: "unknown error"}")
+                }
+            },
+            ContextCompat.getMainExecutor(context)
+    )
+}
+
+private fun copyUriToCache(context: Context, uri: Uri): Uri? {
+    return try {
+        val cacheDirectory = File(context.cacheDir, "captured_pages").also {
+            if (!it.exists()) {
+                it.mkdirs()
+            }
+        }
+        val outputFile = File(
+                cacheDirectory,
+                "gallery_${System.currentTimeMillis()}_${uri.lastPathSegment?.takeLast(20)?.replace("/", "_")}.jpg"
+        )
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            FileOutputStream(outputFile).use { output -> input.copyTo(output) }
+        } ?: run {
+            Log.e("PickImages", "Could not open input stream for $uri")
+            return null
+        }
+        if (outputFile.length() == 0L) {
+            outputFile.delete()
+            Log.e("PickImages", "Copied file is empty for $uri")
+            return null
+        }
+        outputFile.toUri()
+    } catch (e: Exception) {
+        Log.e("PickImages", "Failed to copy URI $uri: ${e.message}", e)
+        null
+    }
+}
+
+private fun sanitizeInitialBounds(bounds: List<PointF>?): List<PointF> {
+    if (bounds == null || bounds.size != 4) return fullImageBounds()
+    val clamped = bounds.map { point ->
+        PointF(point.x.coerceIn(0f, 1f), point.y.coerceIn(0f, 1f))
+    }
+    val area = kotlin.math.abs(polygonArea(clamped))
+    if (area < 0.02f) return fullImageBounds()
+    return clamped
+}
+
+private fun polygonArea(points: List<PointF>): Float {
+    if (points.size < 3) return 0f
+    var sum = 0f
+    for (i in points.indices) {
+        val j = (i + 1) % points.size
+        sum += points[i].x * points[j].y - points[j].x * points[i].y
+    }
+    return sum * 0.5f
 }

@@ -12,7 +12,7 @@ private const val FILTER_MODE_NONE = 0
 private const val FILTER_MODE_BW = 1
 private const val FILTER_MODE_SEPIA = 2
 
-private fun rotateBitmapQuarterTurns(bitmap: Bitmap, turns: Int): Bitmap {
+internal fun rotateBitmapQuarterTurns(bitmap: Bitmap, turns: Int): Bitmap {
     val normalized = ((turns % 4) + 4) % 4
     if (normalized == 0) return bitmap
 
@@ -31,7 +31,7 @@ private fun rotateBitmapQuarterTurns(bitmap: Bitmap, turns: Int): Bitmap {
     )
 }
 
-private fun applyBitmapFilter(bitmap: Bitmap, mode: Int): Bitmap {
+internal fun applyBitmapFilter(bitmap: Bitmap, mode: Int): Bitmap {
     if (mode == FILTER_MODE_NONE) return bitmap
 
     val output = createBitmap(bitmap.width, bitmap.height)
