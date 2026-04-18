@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -51,6 +52,7 @@ fun CropOverlay(
             )
         }
     }
+    val latestBounds = rememberUpdatedState(bounds)
 
     Box(modifier = Modifier.fillMaxSize()) {
         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -80,16 +82,20 @@ fun CropOverlay(
                     .size(28.dp)
                     .clip(RoundedCornerShape(14.dp))
                     .background(Color(0xFF2196F3))
-                    .pointerInput(bounds, index, fitted.width, fitted.height) {
+                    .pointerInput(index, fitted.width, fitted.height) {
                         detectDragGestures { change, drag ->
                             change.consume()
                             if (fitted.width <= 1f || fitted.height <= 1f) {
                                 return@detectDragGestures
                             }
+                            val currentBounds = latestBounds.value
+                            if (currentBounds.size != 4) {
+                                return@detectDragGestures
+                            }
 
                             val currentScreen = PointF(
-                                fitted.offsetX + bounds[index].x * fitted.width,
-                                fitted.offsetY + bounds[index].y * fitted.height
+                                fitted.offsetX + currentBounds[index].x * fitted.width,
+                                fitted.offsetY + currentBounds[index].y * fitted.height
                             )
                             val nextScreenX = (currentScreen.x + drag.x)
                                 .coerceIn(fitted.offsetX, fitted.offsetX + fitted.width)
@@ -101,7 +107,7 @@ fun CropOverlay(
                                 ((nextScreenY - fitted.offsetY) / fitted.height).coerceIn(0f, 1f)
                             )
 
-                            val updated = bounds.toMutableList()
+                            val updated = currentBounds.toMutableList()
                             updated[index] = PointF(
                                 nextNormalized.x,
                                 nextNormalized.y
