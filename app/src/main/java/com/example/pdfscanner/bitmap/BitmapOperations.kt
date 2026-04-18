@@ -1,4 +1,4 @@
-package com.example.pdfscanner.image
+package com.example.pdfscanner.bitmap
 
 import android.graphics.Bitmap
 import android.graphics.Canvas as AndroidCanvas
@@ -7,10 +7,6 @@ import android.graphics.ColorMatrixColorFilter
 import android.graphics.Matrix
 import android.graphics.Paint
 import androidx.core.graphics.createBitmap
-
-private const val FILTER_MODE_NONE = 0
-private const val FILTER_MODE_BW = 1
-private const val FILTER_MODE_SEPIA = 2
 
 internal fun rotateBitmapQuarterTurns(bitmap: Bitmap, turns: Int): Bitmap {
     val normalized = ((turns % 4) + 4) % 4
@@ -32,7 +28,7 @@ internal fun rotateBitmapQuarterTurns(bitmap: Bitmap, turns: Int): Bitmap {
 }
 
 internal fun applyBitmapFilter(bitmap: Bitmap, mode: Int): Bitmap {
-    if (mode == FILTER_MODE_NONE) return bitmap
+    if (mode == FilterMode.NONE) return bitmap
 
     val output = createBitmap(bitmap.width, bitmap.height)
 
@@ -40,11 +36,11 @@ internal fun applyBitmapFilter(bitmap: Bitmap, mode: Int): Bitmap {
 
     val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         colorFilter = when (mode) {
-            FILTER_MODE_BW -> ColorMatrixColorFilter(
+            FilterMode.BW -> ColorMatrixColorFilter(
                 ColorMatrix().apply { setSaturation(0f) }
             )
 
-            FILTER_MODE_SEPIA -> ColorMatrixColorFilter(
+            FilterMode.SEPIA -> ColorMatrixColorFilter(
                 ColorMatrix(
                     floatArrayOf(
                         0.393f, 0.769f, 0.189f, 0f, 0f,

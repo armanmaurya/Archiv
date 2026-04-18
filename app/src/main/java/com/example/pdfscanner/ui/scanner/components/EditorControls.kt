@@ -34,8 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import com.example.pdfscanner.ui.scanner.FILTER_MODE_BW
-import com.example.pdfscanner.ui.scanner.FILTER_MODE_SEPIA
+import com.example.pdfscanner.bitmap.FilterMode
 
 enum class EditorControlMode {
     Default,
@@ -127,14 +126,14 @@ fun EditorControls(
                             FilterThumbnailButton(
                                 preview = bwPreview,
                                 label = "B&W",
-                                selected = selectedFilter == FILTER_MODE_BW,
+                                selected = selectedFilter == FilterMode.BW,
                                 onClick = onSelectBw
                             )
 
                             FilterThumbnailButton(
                                 preview = sepiaPreview,
                                 label = "Sepia",
-                                selected = selectedFilter == FILTER_MODE_SEPIA,
+                                selected = selectedFilter == FilterMode.SEPIA,
                                 onClick = onSelectSepia
                             )
 
@@ -166,7 +165,7 @@ fun EditorControls(
             isFilterMode -> EditorControlMode.Filter
             else -> EditorControlMode.Default
         },
-        selectedFilter = FILTER_MODE_BW,
+        selectedFilter = FilterMode.BW,
         bwPreview = null,
         sepiaPreview = null,
         onStartEdit = onStartEdit,

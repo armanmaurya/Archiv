@@ -3,13 +3,15 @@ package com.example.pdfscanner.camera
 import android.graphics.PointF
 import android.util.Log
 import androidx.camera.core.ImageProxy
+import org.opencv.core.Core
 import org.opencv.core.CvType
 import org.opencv.core.Mat
 import org.opencv.core.MatOfPoint
 import org.opencv.core.Point
+import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 
-class DocumentCornerDetector {
+class FrameProcessor {
     fun sortCornersClockwise(points: List<PointF>): List<PointF> {
         if (points.size != 4) return points
 
@@ -23,48 +25,8 @@ class DocumentCornerDetector {
         }
     }
 
-    fun detectDocumentCorners(imageProxy: ImageProxy): Pair<List<PointF>, Float>? {
-        val yBuffer = imageProxy.planes[0].buffer
-        val ySize = yBuffer.remaining()
-        val yArray = ByteArray(ySize)
-        yBuffer.get(yArray)
-
-        val width = imageProxy.width
-        val height = imageProxy.height
-        val rowStride = imageProxy.planes[0].rowStride
-
-        var srcMat = Mat(height, width, CvType.CV_8UC1)
-        if (rowStride == width) {
-            srcMat.put(0, 0, yArray)
-        } else {
-            val validData = ByteArray(width * height)
-            for (y in 0 until height) {
-                val pos = y * rowStride
-                val lengthToCopy = minOf(width, yArray.size - pos)
-                if (lengthToCopy > 0) {
-                    System.arraycopy(yArray, pos, validData, y * width, lengthToCopy)
-                }
-            }
-            srcMat.put(0, 0, validData)
-        }
-
-        val rotation = imageProxy.imageInfo.rotationDegrees
-        if (rotation == 90) {
-            val rotated = Mat()
-            org.opencv.core.Core.rotate(srcMat, rotated, org.opencv.core.Core.ROTATE_90_CLOCKWISE)
-            srcMat.release()
-            srcMat = rotated
-        } else if (rotation == 180) {
-            val rotated = Mat()
-            org.opencv.core.Core.rotate(srcMat, rotated, org.opencv.core.Core.ROTATE_180)
-            srcMat.release()
-            srcMat = rotated
-        } else if (rotation == 270) {
-            val rotated = Mat()
-            org.opencv.core.Core.rotate(srcMat, rotated, org.opencv.core.Core.ROTATE_90_COUNTERCLOCKWISE)
-            srcMat.release()
-            srcMat = rotated
-        }
+    fun processFrame(imageProxy: ImageProxy): Pair<List<PointF>, Float>? {
+        val srcMat = imageProxyToMat(imageProxy) ?: return null
 
         val processedWidth = srcMat.width()
         val processedHeight = srcMat.height()
@@ -79,7 +41,7 @@ class DocumentCornerDetector {
         val edgesMat = Mat()
         Imgproc.Canny(blurMat, edgesMat, 50.0, 150.0)
 
-        val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, org.opencv.core.Size(5.0, 5.0))
+        val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(5.0, 5.0))
         Imgproc.morphologyEx(edgesMat, edgesMat, Imgproc.MORPH_CLOSE, kernel)
 
         val corners = detectCornersFromHough(edgesMat, processedWidth, processedHeight)
@@ -88,33 +50,77 @@ class DocumentCornerDetector {
         blurMat.release()
         edgesMat.release()
 
-        if (corners != null) {
-            Log.d("detectDocumentCorners", "Found document corners from Hough lines")
+        return corners?.let {
+            Log.d("FrameProcessor", "Found document corners from Hough lines")
             val aspect = processedWidth.toFloat() / processedHeight.toFloat()
-            val mappedPoints = corners.map { point ->
-                PointF(point.x / processedWidth.toFloat(), point.y / processedHeight.toFloat())
+            val normalized =
+                    it.map { point ->
+                        PointF(
+                                point.x / processedWidth.toFloat(),
+                                point.y / processedHeight.toFloat()
+                        )
+                    }
+            Pair(normalized, aspect)
+        }
+    }
+
+    private fun imageProxyToMat(imageProxy: ImageProxy): Mat? {
+        val yBuffer = imageProxy.planes[0].buffer
+        val ySize = yBuffer.remaining()
+        if (ySize <= 0) return null
+
+        val yArray = ByteArray(ySize)
+        yBuffer.get(yArray)
+
+        val width = imageProxy.width
+        val height = imageProxy.height
+        val rowStride = imageProxy.planes[0].rowStride
+
+        val mat = Mat(height, width, CvType.CV_8UC1)
+        if (rowStride == width) {
+            mat.put(0, 0, yArray)
+        } else {
+            val validData = ByteArray(width * height)
+            for (y in 0 until height) {
+                val pos = y * rowStride
+                val lengthToCopy = minOf(width, yArray.size - pos)
+                if (lengthToCopy > 0) {
+                    System.arraycopy(yArray, pos, validData, y * width, lengthToCopy)
+                }
             }
-            return Pair(mappedPoints, aspect)
+            mat.put(0, 0, validData)
         }
 
-        return null
+        return rotateMat(mat, imageProxy.imageInfo.rotationDegrees)
+    }
+
+    private fun rotateMat(src: Mat, rotation: Int): Mat {
+        val rotated = Mat()
+        when (rotation) {
+            90 -> Core.rotate(src, rotated, Core.ROTATE_90_CLOCKWISE)
+            180 -> Core.rotate(src, rotated, Core.ROTATE_180)
+            270 -> Core.rotate(src, rotated, Core.ROTATE_90_COUNTERCLOCKWISE)
+            else -> return src
+        }
+        src.release()
+        return rotated
     }
 
     private fun detectCornersFromHough(
-        edges: Mat,
-        width: Int,
-        height: Int
+            edges: Mat,
+            width: Int,
+            height: Int
     ): List<PointF>? {
         val lines = Mat()
         try {
             Imgproc.HoughLinesP(
-                edges,
-                lines,
-                1.0,
-                Math.PI / 180.0,
-                80,
-                (width * 0.25).coerceAtLeast(60.0),
-                16.0
+                    edges,
+                    lines,
+                    1.0,
+                    Math.PI / 180.0,
+                    80,
+                    (width * 0.25).coerceAtLeast(60.0),
+                    16.0
             )
 
             if (lines.rows() == 0) return null
@@ -127,7 +133,7 @@ class DocumentCornerDetector {
                 if (line.size < 4) continue
                 val dx = line[2] - line[0]
                 val dy = line[3] - line[1]
-                val angle = Math.abs(Math.toDegrees(Math.atan2(dy, dx)))
+                val angle = kotlin.math.abs(Math.toDegrees(Math.atan2(dy, dx)))
                 if (angle < 25.0 || angle > 155.0) {
                     horizontal.add(line)
                 } else if (angle > 65.0 && angle < 115.0) {
@@ -147,7 +153,9 @@ class DocumentCornerDetector {
             val bottomRight = intersect(bottom, right)
             val bottomLeft = intersect(bottom, left)
 
-            if (topLeft == null || topRight == null || bottomRight == null || bottomLeft == null) return null
+            if (topLeft == null || topRight == null || bottomRight == null || bottomLeft == null) {
+                return null
+            }
 
             val quad = listOf(topLeft, topRight, bottomRight, bottomLeft)
             if (!isValidQuadrilateral(quad, width, height)) return null
@@ -172,7 +180,7 @@ class DocumentCornerDetector {
         val c2 = a2 * p3.x + b2 * p3.y
 
         val det = a1 * b2 - a2 * b1
-        if (Math.abs(det) < 1e-6) return null
+        if (kotlin.math.abs(det) < 1e-6) return null
 
         val x = (b2 * c1 - b1 * c2) / det
         val y = (a1 * c2 - a2 * c1) / det
@@ -183,25 +191,35 @@ class DocumentCornerDetector {
         if (points.size != 4) return false
         if (points.any { it.x.isNaN() || it.y.isNaN() }) return false
 
-        val contour = MatOfPoint(
-            Point(points[0].x.toDouble(), points[0].y.toDouble()),
-            Point(points[1].x.toDouble(), points[1].y.toDouble()),
-            Point(points[2].x.toDouble(), points[2].y.toDouble()),
-            Point(points[3].x.toDouble(), points[3].y.toDouble())
-        )
+        val contour =
+                MatOfPoint(
+                        Point(points[0].x.toDouble(), points[0].y.toDouble()),
+                        Point(points[1].x.toDouble(), points[1].y.toDouble()),
+                        Point(points[2].x.toDouble(), points[2].y.toDouble()),
+                        Point(points[3].x.toDouble(), points[3].y.toDouble())
+                )
         if (!Imgproc.isContourConvex(contour)) return false
 
-        val area = Math.abs(Imgproc.contourArea(contour))
+        val area = kotlin.math.abs(Imgproc.contourArea(contour))
         contour.release()
         if (area < width * height * 0.05) return false
 
         val centerX = points.map { it.x }.average().toFloat()
         val centerY = points.map { it.y }.average().toFloat()
-        val ordered = points.sortedWith { a, b ->
-            val angleA = kotlin.math.atan2((a.y - centerY).toDouble(), (a.x - centerX).toDouble())
-            val angleB = kotlin.math.atan2((b.y - centerY).toDouble(), (b.x - centerX).toDouble())
-            angleA.compareTo(angleB)
-        }
+        val ordered =
+                points.sortedWith { a, b ->
+                    val angleA =
+                            kotlin.math.atan2(
+                                    (a.y - centerY).toDouble(),
+                                    (a.x - centerX).toDouble()
+                            )
+                    val angleB =
+                            kotlin.math.atan2(
+                                    (b.y - centerY).toDouble(),
+                                    (b.x - centerX).toDouble()
+                            )
+                    angleA.compareTo(angleB)
+                }
         val top = distance(ordered[0], ordered[1])
         val right = distance(ordered[1], ordered[2])
         val bottom = distance(ordered[2], ordered[3])

@@ -1,4 +1,4 @@
-package com.example.pdfscanner.image
+package com.example.pdfscanner.bitmap
 
 import android.graphics.Bitmap
 import android.graphics.PointF

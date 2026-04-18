@@ -18,10 +18,10 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import com.example.pdfscanner.decodeScaledBitmap
-import com.example.pdfscanner.image.rotateBitmapQuarterTurns
-import com.example.pdfscanner.image.applyBitmapFilter
-import com.example.pdfscanner.image.warpBitmapWithQuad
+import com.example.pdfscanner.bitmap.decodeSampledBitmap
+import com.example.pdfscanner.bitmap.rotateBitmapQuarterTurns
+import com.example.pdfscanner.bitmap.applyBitmapFilter
+import com.example.pdfscanner.bitmap.warpBitmapWithQuad
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -43,7 +43,7 @@ fun ImageRenderer(
     // Load image
     LaunchedEffect(uri) {
         val bitmap = withContext(Dispatchers.IO) {
-            decodeScaledBitmap(context, uri, 2200)
+            decodeSampledBitmap(context, uri, 2200)
         }
         baseBitmap = bitmap
     }
