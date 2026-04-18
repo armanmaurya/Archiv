@@ -28,6 +28,12 @@ const val FILTER_MODE_NONE = 0
 const val FILTER_MODE_BW = 1
 const val FILTER_MODE_SEPIA = 2
 
+enum class Mode {
+    DEFAULT,
+    CROP,
+    FILTER
+}
+
 class ScannerViewModel : ViewModel() {
 
     var pages by mutableStateOf<List<PageState>>(emptyList())

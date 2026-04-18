@@ -21,7 +21,7 @@ import androidx.navigation.navigation
 import androidx.navigation.navArgument
 import com.example.pdfscanner.ui.scanner.ScannerScreen
 import com.example.pdfscanner.ui.scanner.ScannerViewModel
-import com.example.pdfscanner.ui.editor.EditorScreen
+import com.example.pdfscanner.ui.scanner.EditorScreen
 
 @Composable
 inline fun <reified T : ViewModel> NavBackStackEntry.sharedViewModel(
@@ -93,7 +93,10 @@ fun AppNavHost(
                     EditorScreen(
                         viewModel = viewModel,
                         initialPage = startIndex,
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        sharedTransitionScope = this@SharedTransitionLayout,
+                        animatedVisibilityScope = this,
+                        sharedElementKeyForUri = { uri -> "page-$uri" }
                     )
                 }
             }
