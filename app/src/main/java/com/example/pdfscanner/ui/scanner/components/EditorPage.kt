@@ -22,11 +22,11 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
-import com.example.pdfscanner.decodeScaledBitmap
-import com.example.pdfscanner.image.BitmapMemoryCache
-import com.example.pdfscanner.image.applyBitmapFilter
-import com.example.pdfscanner.image.rotateBitmapQuarterTurns
-import com.example.pdfscanner.image.warpBitmapWithQuad
+import com.example.pdfscanner.bitmap.decodeSampledBitmap
+import com.example.pdfscanner.bitmap.BitmapCache
+import com.example.pdfscanner.bitmap.applyBitmapFilter
+import com.example.pdfscanner.bitmap.rotateBitmapQuarterTurns
+import com.example.pdfscanner.bitmap.warpBitmapWithQuad
 import com.example.pdfscanner.ui.scanner.Mode
 import com.example.pdfscanner.ui.scanner.PageState
 import kotlinx.coroutines.Dispatchers
@@ -52,11 +52,11 @@ fun EditorPage(
     val uri = pageState.uri
     val cacheKey = uri.toString()
     val initialPreviewBitmap = remember(uri) {
-        BitmapMemoryCache.getPreview(cacheKey)
+        BitmapCache.getPreview(cacheKey)
     }
     val initialTransitionBitmap = remember(uri, pageState.cropBounds) {
         val thumbnailCacheKey = "$cacheKey-thumb-${pageState.cropBounds.hashCode()}"
-        BitmapMemoryCache.getThumbnail(thumbnailCacheKey)
+        BitmapCache.getThumbnail(thumbnailCacheKey)
     }
     var baseBitmap by remember(uri) { mutableStateOf<Bitmap?>(initialPreviewBitmap) }
     var displayedBitmap by remember(uri) { mutableStateOf<ImageBitmap?>(initialTransitionBitmap?.asImageBitmap()) }
@@ -75,11 +75,11 @@ fun EditorPage(
     var containerHeight by remember(uri) { mutableStateOf(0) }
 
     LaunchedEffect(uri) {
-        BitmapMemoryCache.getPreview(cacheKey)?.let { baseBitmap = it }
+        BitmapCache.getPreview(cacheKey)?.let { baseBitmap = it }
 
-        val bitmap = withContext(Dispatchers.IO) { decodeScaledBitmap(context, uri, 2200) }
+        val bitmap = withContext(Dispatchers.IO) { decodeSampledBitmap(context, uri, 2200) }
         if (bitmap != null) {
-            BitmapMemoryCache.putPreview(cacheKey, bitmap)
+            BitmapCache.putPreview(cacheKey, bitmap)
             baseBitmap = bitmap
         }
     }

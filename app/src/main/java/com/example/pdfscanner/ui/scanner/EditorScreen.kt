@@ -35,11 +35,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import com.example.pdfscanner.decodeScaledBitmap
-import com.example.pdfscanner.image.BitmapMemoryCache
-import com.example.pdfscanner.image.applyBitmapFilter
-import com.example.pdfscanner.image.fullImageBounds
-import com.example.pdfscanner.image.orderCorners
+import com.example.pdfscanner.bitmap.FilterMode
+import com.example.pdfscanner.bitmap.decodeSampledBitmap
+import com.example.pdfscanner.bitmap.BitmapCache
+import com.example.pdfscanner.bitmap.applyBitmapFilter
+import com.example.pdfscanner.bitmap.fullImageBounds
+import com.example.pdfscanner.bitmap.orderCorners
 import com.example.pdfscanner.ui.scanner.components.EditorControlMode
 import com.example.pdfscanner.ui.scanner.components.EditorControls
 import com.example.pdfscanner.ui.scanner.components.EditorPage
@@ -69,7 +70,7 @@ fun EditorScreen (
     var mode by remember { mutableStateOf(Mode.DEFAULT) }
     var editingBounds by remember { mutableStateOf(fullImageBounds()) }
     var editingRotationTurns by remember { mutableIntStateOf(0) }
-    var editingFilterMode by remember { mutableIntStateOf(FILTER_MODE_NONE) }
+    var editingFilterMode by remember { mutableIntStateOf(FilterMode.NONE) }
     var controlsVisible by remember { mutableStateOf(false) }
     var filterPreviewBaseBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
@@ -154,10 +155,10 @@ fun EditorScreen (
     LaunchedEffect(pagerState.currentPage, pages) {
         val currentUri = pages.getOrNull(pagerState.currentPage)?.uri ?: return@LaunchedEffect
         val cacheKey = currentUri.toString()
-        val cached = BitmapMemoryCache.getThumbnail(cacheKey) ?: BitmapMemoryCache.getPreview(cacheKey)
-        val loaded = cached ?: withContext(Dispatchers.IO) { decodeScaledBitmap(context, currentUri, 420) }
+        val cached = BitmapCache.getThumbnail(cacheKey) ?: BitmapCache.getPreview(cacheKey)
+        val loaded = cached ?: withContext(Dispatchers.IO) { decodeSampledBitmap(context, currentUri, 420) }
         if (loaded != null) {
-            BitmapMemoryCache.putThumbnail(cacheKey, loaded)
+            BitmapCache.putThumbnail(cacheKey, loaded)
             filterPreviewBaseBitmap = loaded
         } else {
             filterPreviewBaseBitmap = null
@@ -165,10 +166,10 @@ fun EditorScreen (
     }
 
     val bwPreview = remember(filterPreviewBaseBitmap) {
-        filterPreviewBaseBitmap?.let { applyBitmapFilter(it, FILTER_MODE_BW).asImageBitmap() }
+        filterPreviewBaseBitmap?.let { applyBitmapFilter(it, FilterMode.BW).asImageBitmap() }
     }
     val sepiaPreview = remember(filterPreviewBaseBitmap) {
-        filterPreviewBaseBitmap?.let { applyBitmapFilter(it, FILTER_MODE_SEPIA).asImageBitmap() }
+        filterPreviewBaseBitmap?.let { applyBitmapFilter(it, FilterMode.SEPIA).asImageBitmap() }
     }
 
     val controlMode = when (mode) {
@@ -231,9 +232,9 @@ fun EditorScreen (
             onResetCrop = { editingBounds = fullImageBounds() },
             onRotate = ::rotateCropClockwise,
             onApplyCrop = ::applyCrop,
-            onClearFilter = { editingFilterMode = FILTER_MODE_NONE },
-            onSelectBw = { editingFilterMode = FILTER_MODE_BW },
-            onSelectSepia = { editingFilterMode = FILTER_MODE_SEPIA },
+            onClearFilter = { editingFilterMode = FilterMode.NONE },
+            onSelectBw = { editingFilterMode = FilterMode.BW },
+            onSelectSepia = { editingFilterMode = FilterMode.SEPIA },
             onApplyFilter = ::applyFilter,
             modifier = Modifier.align(Alignment.BottomCenter)
                 .fillMaxWidth()

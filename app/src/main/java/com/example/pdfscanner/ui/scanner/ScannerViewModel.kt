@@ -9,8 +9,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.pdfscanner.decodeScaledBitmap
-import com.example.pdfscanner.image.fullImageBounds
+import com.example.pdfscanner.bitmap.decodeSampledBitmap
+import com.example.pdfscanner.bitmap.FilterMode
+import com.example.pdfscanner.bitmap.fullImageBounds
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
@@ -23,10 +24,6 @@ data class PageState(
     val rotation: Int,
     val filter: Int
 )
-
-const val FILTER_MODE_NONE = 0
-const val FILTER_MODE_BW = 1
-const val FILTER_MODE_SEPIA = 2
 
 enum class Mode {
     DEFAULT,
@@ -57,7 +54,7 @@ class ScannerViewModel : ViewModel() {
             uri = uri,
             cropBounds = bounds,
             rotation = 0,
-            filter = FILTER_MODE_NONE
+            filter = FilterMode.NONE
         )
     }
 
@@ -120,7 +117,7 @@ class ScannerViewModel : ViewModel() {
                     val pdfDocument = PdfDocument()
                     try {
                         pageUris.forEachIndexed { index, imageUri ->
-                            val bitmap = decodeScaledBitmap(context, imageUri)
+                            val bitmap = decodeSampledBitmap(context, imageUri)
                                 ?: throw IOException("Unable to decode captured page: $imageUri")
                             val page = pdfDocument.startPage(
                                 PdfDocument.PageInfo.Builder(bitmap.width, bitmap.height, index + 1).create()

@@ -1,9 +1,9 @@
-package com.example.pdfscanner.image
+package com.example.pdfscanner.bitmap
 
 import android.graphics.Bitmap
 import android.util.LruCache
 
-object BitmapMemoryCache {
+object BitmapCache {
     private val thumbnailCache = object : LruCache<String, Bitmap>(16 * 1024) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount / 1024
     }
