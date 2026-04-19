@@ -67,7 +67,9 @@ fun ThumbnailStrip(
     onScrollHintConsumed: () -> Unit,
     sharedTransitionScope: SharedTransitionScope? = null,
     animatedVisibilityScope: AnimatedVisibilityScope? = null,
-    sharedElementKeyForUri: (Uri) -> String = { uri -> "page-$uri" }
+    sharedElementKeyForUri: (Uri) -> String = { uri -> "page-$uri" },
+    openAfterScrollRequestToken: Long = 0L,
+    openAfterScrollIndex: Int = -1
 ) {
     val lazyListState = rememberLazyListState()
     var draggingIndex by remember { mutableStateOf<Int?>(null) }
@@ -85,6 +87,13 @@ fun ThumbnailStrip(
     LaunchedEffect(pages.size) {
         if (pages.isNotEmpty()) {
             lazyListState.animateScrollToItem(pages.size - 1)
+        }
+    }
+
+    LaunchedEffect(openAfterScrollRequestToken, openAfterScrollIndex, pages.size) {
+        if (openAfterScrollRequestToken > 0L && openAfterScrollIndex in pages.indices) {
+            lazyListState.animateScrollToItem(openAfterScrollIndex)
+            onOpenEditor(openAfterScrollIndex)
         }
     }
 

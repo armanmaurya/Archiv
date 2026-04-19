@@ -7,9 +7,14 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -22,6 +27,7 @@ import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +53,7 @@ fun EditorControls(
     visible: Boolean,
     mode: EditorControlMode,
     selectedFilter: Int,
+    nonePreview: ImageBitmap?,
     bwPreview: ImageBitmap?,
     sepiaPreview: ImageBitmap?,
     onStartEdit: () -> Unit,
@@ -110,18 +117,14 @@ fun EditorControls(
                                 Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Text("  Rotate")
                             }
-
-                            FilledTonalButton(onClick = onApplyCrop, shape = RoundedCornerShape(50)) {
-                                Icon(Icons.Default.Done, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Text("  Done")
-                            }
                         }
 
                         EditorControlMode.Filter -> {
-                            FilledTonalButton(onClick = onClearFilter, shape = RoundedCornerShape(50)) {
-                                Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Text("  No Filter")
-                            }
+                            NoFilterThumbnailButton(
+                                preview = nonePreview,
+                                selected = selectedFilter == FilterMode.NONE,
+                                onClick = onClearFilter
+                            )
 
                             FilterThumbnailButton(
                                 preview = bwPreview,
@@ -136,11 +139,6 @@ fun EditorControls(
                                 selected = selectedFilter == FilterMode.SEPIA,
                                 onClick = onSelectSepia
                             )
-
-                            FilledTonalButton(onClick = onApplyFilter, shape = RoundedCornerShape(50)) {
-                                Icon(Icons.Default.Done, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Text("  Done")
-                            }
                         }
                     }
                 }
@@ -166,6 +164,7 @@ fun EditorControls(
             else -> EditorControlMode.Default
         },
         selectedFilter = FilterMode.BW,
+        nonePreview = null,
         bwPreview = null,
         sepiaPreview = null,
         onStartEdit = onStartEdit,
@@ -182,23 +181,102 @@ fun EditorControls(
 }
 
 @Composable
+private fun NoFilterThumbnailButton(
+    preview: ImageBitmap?,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    FilterOptionColumn(
+        preview = preview,
+        label = "None",
+        selected = selected,
+        contentDescription = "No Filter",
+        onClick = onClick
+    )
+}
+
+@Composable
 private fun FilterThumbnailButton(
     preview: ImageBitmap?,
     label: String,
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    FilledTonalButton(onClick = onClick, shape = RoundedCornerShape(18.dp)) {
-        if (preview != null) {
-            Image(
-                bitmap = preview,
-                contentDescription = label,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.size(36.dp).clip(RoundedCornerShape(10.dp))
+    FilterOptionColumn(
+        preview = preview,
+        label = label,
+        selected = selected,
+        contentDescription = label,
+        onClick = onClick
+    )
+}
+
+@Composable
+private fun FilterOptionColumn(
+    preview: ImageBitmap?,
+    label: String,
+    selected: Boolean,
+    contentDescription: String,
+    onClick: () -> Unit
+) {
+    val labelColor =
+        if (selected) MaterialTheme.colorScheme.primary
+        else MaterialTheme.colorScheme.onSurfaceVariant
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        FilledTonalButton(
+            onClick = onClick,
+            shape = RoundedCornerShape(18.dp),
+            modifier = Modifier.size(FILTER_THUMBNAIL_SIZE),
+            contentPadding = PaddingValues(0.dp),
+            colors = ButtonDefaults.filledTonalButtonColors(
+                containerColor =
+                    if (selected) MaterialTheme.colorScheme.primaryContainer
+                    else MaterialTheme.colorScheme.surfaceVariant,
+                contentColor =
+                    if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                    else MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Text(if (selected) "  $label ✓" else "  $label")
-        } else {
-            Text(if (selected) "$label ✓" else label)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (preview != null) {
+                    Image(
+                        bitmap = preview,
+                        contentDescription = contentDescription,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                if (selected) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.4f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Done,
+                            contentDescription = "Selected",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+            }
         }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = labelColor,
+            modifier = Modifier.padding(top = 4.dp)
+        )
     }
 }
+
+private val FILTER_THUMBNAIL_SIZE = 64.dp

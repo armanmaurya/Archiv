@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -53,6 +54,8 @@ fun CropOverlay(
         }
     }
     val latestBounds = rememberUpdatedState(bounds)
+    val strokeColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
+    val handleColor = MaterialTheme.colorScheme.primary
 
     Box(modifier = Modifier.fillMaxSize()) {
         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -65,7 +68,7 @@ fun CropOverlay(
             }
             drawPath(
                 path = path,
-                color = Color(0xFF2196F3).copy(alpha = 0.9f),
+                color = strokeColor,
                 style = Stroke(width = 6f)
             )
         }
@@ -81,7 +84,7 @@ fun CropOverlay(
                     }
                     .size(28.dp)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFF2196F3))
+                    .background(handleColor)
                     .pointerInput(index, fitted.width, fitted.height) {
                         detectDragGestures { change, drag ->
                             change.consume()

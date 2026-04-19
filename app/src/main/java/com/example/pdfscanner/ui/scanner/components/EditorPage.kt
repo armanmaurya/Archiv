@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.PointF
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.gestures.rememberTransformableState
@@ -38,7 +39,7 @@ import com.example.pdfscanner.ui.scanner.PageState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-@OptIn(ExperimentalSharedTransitionApi::class)
+@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun EditorPage(
     page: Int,
@@ -81,18 +82,36 @@ fun EditorPage(
     var containerHeight by remember(uri) { mutableStateOf(0) }
     var cropZoom by remember(uri) { mutableStateOf(1f) }
     var cropOffset by remember(uri) { mutableStateOf(Offset.Zero) }
+    var viewZoom by remember(uri) { mutableStateOf(1f) }
+    var viewOffset by remember(uri) { mutableStateOf(Offset.Zero) }
     val isEditableCropPage = isCropMode && isCurrentPage
+    val isZoomableViewPage = !isCropMode && isCurrentPage
     val cropGestureState = rememberTransformableState { zoomChange, panChange, _ ->
-        if (!isEditableCropPage) return@rememberTransformableState
-        val nextZoom = (cropZoom * zoomChange).coerceIn(1f, MAX_CROP_ZOOM)
-        val nextOffset = clampCropOffset(
-            offset = if (nextZoom > 1f) cropOffset + panChange else Offset.Zero,
-            zoom = nextZoom,
-            containerWidth = containerWidth,
-            containerHeight = containerHeight
-        )
-        cropZoom = nextZoom
-        cropOffset = nextOffset
+        when {
+            isEditableCropPage -> {
+                val nextZoom = (cropZoom * zoomChange).coerceIn(1f, MAX_CROP_ZOOM)
+                val nextOffset = clampOffset(
+                    offset = if (nextZoom > 1f) cropOffset + panChange else Offset.Zero,
+                    zoom = nextZoom,
+                    containerWidth = containerWidth,
+                    containerHeight = containerHeight
+                )
+                cropZoom = nextZoom
+                cropOffset = nextOffset
+            }
+
+            isZoomableViewPage -> {
+                val nextZoom = (viewZoom * zoomChange).coerceIn(1f, MAX_VIEW_ZOOM)
+                val nextOffset = clampOffset(
+                    offset = if (nextZoom > 1f) viewOffset + panChange else Offset.Zero,
+                    zoom = nextZoom,
+                    containerWidth = containerWidth,
+                    containerHeight = containerHeight
+                )
+                viewZoom = nextZoom
+                viewOffset = nextOffset
+            }
+        }
     }
 
     LaunchedEffect(isEditableCropPage) {
@@ -102,11 +121,25 @@ fun EditorPage(
         }
     }
 
-    LaunchedEffect(containerWidth, containerHeight, cropZoom, isEditableCropPage) {
+    LaunchedEffect(
+        containerWidth,
+        containerHeight,
+        cropZoom,
+        viewZoom,
+        isEditableCropPage,
+        isZoomableViewPage
+    ) {
         if (isEditableCropPage) {
-            cropOffset = clampCropOffset(
+            cropOffset = clampOffset(
                 offset = cropOffset,
                 zoom = cropZoom,
+                containerWidth = containerWidth,
+                containerHeight = containerHeight
+            )
+        } else if (isZoomableViewPage) {
+            viewOffset = clampOffset(
+                offset = viewOffset,
+                zoom = viewZoom,
                 containerWidth = containerWidth,
                 containerHeight = containerHeight
             )
@@ -165,20 +198,27 @@ fun EditorPage(
                     Modifier
                 }
             val cropTransformModifier =
-                if (isEditableCropPage) {
+                if (isEditableCropPage || isZoomableViewPage) {
                     Modifier
                         .graphicsLayer {
-                            scaleX = cropZoom
-                            scaleY = cropZoom
-                            translationX = cropOffset.x
-                            translationY = cropOffset.y
+                            val activeZoom = if (isEditableCropPage) cropZoom else viewZoom
+                            val activeOffset = if (isEditableCropPage) cropOffset else viewOffset
+                            scaleX = activeZoom
+                            scaleY = activeZoom
+                            translationX = activeOffset.x
+                            translationY = activeOffset.y
                         }
                 } else {
                     Modifier
                 }
             val cropGestureModifier =
-                if (isEditableCropPage) {
-                    Modifier.transformable(state = cropGestureState)
+                if (isEditableCropPage || isZoomableViewPage) {
+                    Modifier.transformable(
+                        state = cropGestureState,
+                        canPan = { _ ->
+                            if (isEditableCropPage) cropZoom > 1f else viewZoom > 1f
+                        }
+                    )
                 } else {
                     Modifier
                 }
@@ -230,9 +270,10 @@ fun EditorPage(
 }
 
 private const val MAX_CROP_ZOOM = 4f
+private const val MAX_VIEW_ZOOM = 4f
 private val CROP_SIDE_PADDING = 20.dp
 
-private fun clampCropOffset(
+private fun clampOffset(
     offset: Offset,
     zoom: Float,
     containerWidth: Int,
