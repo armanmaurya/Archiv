@@ -3,6 +3,7 @@ package com.example.pdfscanner.ui.scanner.components
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.graphics.PointF
 import android.net.Uri
 import android.util.Log
@@ -19,6 +20,7 @@ import androidx.camera.view.PreviewView
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,6 +53,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -225,11 +229,21 @@ fun CameraPreview(
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var detectedCorners by remember { mutableStateOf<List<PointF>?>(null) }
+    var frozenPreviewFrame by remember { mutableStateOf<Bitmap?>(null) }
     var imageAspectRatio by remember { mutableFloatStateOf(0.75f) }
     val currentDetectedCorners by rememberUpdatedState(detectedCorners)
+    val clearFrozenPreviewFrame = {
+        frozenPreviewFrame?.let { bitmap ->
+            if (!bitmap.isRecycled) {
+                bitmap.recycle()
+            }
+        }
+        frozenPreviewFrame = null
+    }
 
     DisposableEffect(Unit) {
         onDispose {
+            clearFrozenPreviewFrame()
             analyzerExecutor.shutdown()
             onCameraBusyChange(false)
         }
@@ -252,6 +266,7 @@ fun CameraPreview(
         if (!hasCameraPermission || targetPreviewView == null) {
             imageCapture = null
             detectedCorners = null
+            clearFrozenPreviewFrame()
             onCameraBusyChange(false)
             return@LaunchedEffect
         }
@@ -300,12 +315,17 @@ fun CameraPreview(
 
         onCameraBusyChange(true)
         onCameraError(null)
+        previewView?.bitmap?.copy(Bitmap.Config.ARGB_8888, false)?.let { capturedFrame ->
+            clearFrozenPreviewFrame()
+            frozenPreviewFrame = capturedFrame
+        }
 
         captureUseCase.takePicture(
                 outputOptions,
                 ContextCompat.getMainExecutor(context),
                 object : ImageCapture.OnImageSavedCallback {
                     override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                        clearFrozenPreviewFrame()
                         val savedUri = outputFile.toUri()
                         val initialBounds = if (isAutoEdgeDetectionEnabled) {
                             sanitizeInitialBounds(
@@ -321,6 +341,7 @@ fun CameraPreview(
                     }
 
                     override fun onError(exception: ImageCaptureException) {
+                        clearFrozenPreviewFrame()
                         onCameraBusyChange(false)
                         onCameraError(exception.message ?: "Failed to capture page.")
                         Log.e("CapturePage", "ImageCapture error: ${exception.message}", exception)
@@ -353,6 +374,17 @@ fun CameraPreview(
                         )
         )
 
+        frozenPreviewFrame?.let { capturedFrame ->
+            Image(
+                    bitmap = capturedFrame.asImageBitmap(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().clip(
+                            RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)
+                    )
+            )
+        }
+
         if (isAutoEdgeDetectionEnabled) {
             DocumentOverlay(corners = detectedCorners, imageAspectRatio = imageAspectRatio)
         }
@@ -364,7 +396,7 @@ fun CameraPreview(
         )
 
         SearchingIndicator(
-                isVisible = isAutoEdgeDetectionEnabled && detectedCorners == null,
+                isVisible = isAutoEdgeDetectionEnabled && detectedCorners == null && frozenPreviewFrame == null,
                 modifier = Modifier.align(Alignment.BottomCenter)
         )
     }

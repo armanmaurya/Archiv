@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -44,7 +45,7 @@ fun GalleryButton(
 
     Box(
             modifier =
-                    modifier.size(56.dp).clip(CircleShape).background(backgroundColor).clickable(
+                    modifier.defaultMinSize(minWidth = 56.dp, minHeight = 56.dp).clip(CircleShape).background(backgroundColor).clickable(
                                     enabled = enabled
                             ) { pickImagesLauncher.launch("image/*") },
             contentAlignment = Alignment.Center

@@ -2,8 +2,11 @@ package com.example.pdfscanner.ui.scanner.components
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
@@ -22,7 +25,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
@@ -58,7 +60,6 @@ fun EditorControls(
     sepiaPreview: ImageBitmap?,
     onStartEdit: () -> Unit,
     onStartFilter: () -> Unit,
-    onDelete: () -> Unit,
     onResetCrop: () -> Unit,
     onRotate: () -> Unit,
     onApplyCrop: () -> Unit,
@@ -66,6 +67,7 @@ fun EditorControls(
     onSelectBw: () -> Unit,
     onSelectSepia: () -> Unit,
     onApplyFilter: () -> Unit,
+    bottomContent: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     AnimatedVisibility(
@@ -75,72 +77,77 @@ fun EditorControls(
         exit = fadeOut() + slideOutVertically { it / 2 }
     ) {
         Surface(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().animateContentSize(),
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
             tonalElevation = 6.dp,
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
         ) {
-            AnimatedContent(targetState = mode, label = "editor-controls-mode") { currentMode ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    when (currentMode) {
-                        EditorControlMode.Default -> {
-                            FilledTonalButton(onClick = onStartEdit, shape = RoundedCornerShape(50)) {
-                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Text("  Crop & Rotate")
-                            }
+            Column(modifier = Modifier.fillMaxWidth()) {
+                AnimatedContent(targetState = mode, label = "editor-controls-mode") { currentMode ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        when (currentMode) {
+                            EditorControlMode.Default -> {
+                                FilledTonalButton(onClick = onStartEdit, shape = RoundedCornerShape(50)) {
+                                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Text("  Crop & Rotate")
+                                }
 
                             FilledTonalButton(onClick = onStartFilter, shape = RoundedCornerShape(50)) {
                                 Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Text("  Filter")
                             }
-
-                            FilledTonalButton(onClick = onDelete, shape = RoundedCornerShape(50)) {
-                                Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Text("  Delete")
-                            }
                         }
 
-                        EditorControlMode.Crop -> {
-                            FilledTonalButton(onClick = onResetCrop, shape = RoundedCornerShape(50)) {
-                                Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Text("  No Crop")
+                            EditorControlMode.Crop -> {
+                                FilledTonalButton(onClick = onResetCrop, shape = RoundedCornerShape(50)) {
+                                    Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Text("  No Crop")
+                                }
+
+                                FilledTonalButton(onClick = onRotate, shape = RoundedCornerShape(50)) {
+                                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Text("  Rotate")
+                                }
                             }
 
-                            FilledTonalButton(onClick = onRotate, shape = RoundedCornerShape(50)) {
-                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Text("  Rotate")
+                            EditorControlMode.Filter -> {
+                                NoFilterThumbnailButton(
+                                    preview = nonePreview,
+                                    selected = selectedFilter == FilterMode.NONE,
+                                    onClick = onClearFilter
+                                )
+
+                                FilterThumbnailButton(
+                                    preview = bwPreview,
+                                    label = "B&W",
+                                    selected = selectedFilter == FilterMode.BW,
+                                    onClick = onSelectBw
+                                )
+
+                                FilterThumbnailButton(
+                                    preview = sepiaPreview,
+                                    label = "Sepia",
+                                    selected = selectedFilter == FilterMode.SEPIA,
+                                    onClick = onSelectSepia
+                                )
                             }
-                        }
-
-                        EditorControlMode.Filter -> {
-                            NoFilterThumbnailButton(
-                                preview = nonePreview,
-                                selected = selectedFilter == FilterMode.NONE,
-                                onClick = onClearFilter
-                            )
-
-                            FilterThumbnailButton(
-                                preview = bwPreview,
-                                label = "B&W",
-                                selected = selectedFilter == FilterMode.BW,
-                                onClick = onSelectBw
-                            )
-
-                            FilterThumbnailButton(
-                                preview = sepiaPreview,
-                                label = "Sepia",
-                                selected = selectedFilter == FilterMode.SEPIA,
-                                onClick = onSelectSepia
-                            )
                         }
                     }
+                }
+
+                AnimatedVisibility(
+                    visible = mode == EditorControlMode.Default && bottomContent != null,
+                    enter = fadeIn() + expandVertically(expandFrom = Alignment.Top),
+                    exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top)
+                ) {
+                    bottomContent?.invoke()
                 }
             }
         }
@@ -169,7 +176,6 @@ fun EditorControls(
         sepiaPreview = null,
         onStartEdit = onStartEdit,
         onStartFilter = onStartFilter,
-        onDelete = {},
         onResetCrop = {},
         onRotate = {},
         onApplyCrop = onApplyCrop,

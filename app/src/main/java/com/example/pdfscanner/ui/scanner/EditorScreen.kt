@@ -11,12 +11,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -28,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -55,9 +59,12 @@ import com.example.pdfscanner.bitmap.warpBitmapWithQuad
 import com.example.pdfscanner.ui.scanner.components.EditorControlMode
 import com.example.pdfscanner.ui.scanner.components.EditorControls
 import com.example.pdfscanner.ui.scanner.components.EditorPage
+import com.example.pdfscanner.ui.scanner.components.GalleryButton
 import com.example.pdfscanner.ui.scanner.components.StepIndicator
+import com.example.pdfscanner.ui.scanner.components.ThumbnailStrip
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalSharedTransitionApi::class)
@@ -72,17 +79,20 @@ fun EditorScreen (
 ) {
     val pages = viewModel.pages
     if (pages.isEmpty()) {
-        onBack()
+        LaunchedEffect(Unit) { onBack() }
         return
     }
 
     val safeInitialPage = initialPage.coerceIn(0, pages.lastIndex)
     val pagerState = rememberPagerState(initialPage = safeInitialPage, pageCount = { pages.size })
+    val coroutineScope = rememberCoroutineScope()
     var mode by remember { mutableStateOf(Mode.DEFAULT) }
     var editingBounds by remember { mutableStateOf(fullImageBounds()) }
     var editingRotationTurns by remember { mutableIntStateOf(0) }
     var editingFilterMode by remember { mutableIntStateOf(FilterMode.NONE) }
     var controlsVisible by remember { mutableStateOf(false) }
+    var pendingDeleteIndex by remember { mutableStateOf<Int?>(null) }
+    var isImportBusy by remember { mutableStateOf(false) }
     var filterPreviewBaseBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
     fun getCurrentPage() = pages.getOrNull(pagerState.currentPage)
@@ -111,15 +121,6 @@ fun EditorScreen (
         val current = getCurrentPage() ?: return
         viewModel.updateFilter(current.uri, editingFilterMode)
         mode = Mode.DEFAULT
-    }
-
-    fun deleteCurrentPage() {
-        val pageIndex = pagerState.currentPage
-        val shouldDismiss = pages.size <= 1
-        viewModel.removePage(pageIndex)
-        if (shouldDismiss) {
-            onBack()
-        }
     }
 
     fun rotateCropClockwise() {
@@ -163,9 +164,7 @@ fun EditorScreen (
     }
 
     LaunchedEffect(pages.size) {
-        if (pages.isEmpty()) {
-            onBack()
-        } else if (pagerState.currentPage > pages.lastIndex) {
+        if (pagerState.currentPage > pages.lastIndex) {
             pagerState.animateScrollToPage(pages.lastIndex)
         }
     }
@@ -311,7 +310,6 @@ fun EditorScreen (
             sepiaPreview = sepiaPreview,
             onStartEdit = ::startCrop,
             onStartFilter = ::startFilter,
-            onDelete = ::deleteCurrentPage,
             onResetCrop = { editingBounds = fullImageBounds() },
             onRotate = ::rotateCropClockwise,
             onApplyCrop = ::applyCrop,
@@ -319,9 +317,78 @@ fun EditorScreen (
             onSelectBw = { editingFilterMode = FilterMode.BW },
             onSelectSepia = { editingFilterMode = FilterMode.SEPIA },
             onApplyFilter = ::applyFilter,
+            bottomContent = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(96.dp)
+                        .padding(horizontal = 8.dp)
+                ) {
+                    ThumbnailStrip(
+                        pages = pages,
+                        onOpenEditor = { index ->
+                            if (index in pages.indices && index != pagerState.currentPage) {
+                                coroutineScope.launch { pagerState.animateScrollToPage(index) }
+                            }
+                        },
+                        onDelete = { index -> pendingDeleteIndex = index },
+                        onReorder = { _, _ -> },
+                        scrollToIndexHint = null,
+                        onScrollHintConsumed = {},
+                        selectedIndex = pagerState.currentPage,
+                        enableReorder = false,
+                        enabled = mode == Mode.DEFAULT && !isImportBusy,
+                        autoScrollToLastOnSizeChange = false,
+                        sharedTransitionScope = null,
+                        animatedVisibilityScope = null,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(end = 64.dp)
+                    )
+                    GalleryButton(
+                        onImagesSelected = { uris ->
+                            isImportBusy = true
+                            coroutineScope.launch {
+                                val copiedUris = withContext(Dispatchers.IO) {
+                                    uris.mapNotNull { uri -> copyUriToCache(context, uri) }
+                                }
+                                copiedUris.forEach { uri -> viewModel.addPage(uri) }
+                                isImportBusy = false
+                            }
+                        },
+                        enabled = mode == Mode.DEFAULT && !viewModel.isSavingPdf && !isImportBusy,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .fillMaxHeight()
+                            .width(56.dp)
+                            .padding(vertical = 8.dp)
+                    )
+                }
+            },
             modifier = Modifier.align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.safeDrawing)
+        )
+    }
+
+    pendingDeleteIndex?.let { index ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteIndex = null },
+            title = { Text("Delete image?") },
+            text = { Text("This will remove the selected image from the current scan.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (index in pages.indices) {
+                            viewModel.removePage(index)
+                        }
+                        pendingDeleteIndex = null
+                    }
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteIndex = null }) { Text("Cancel") }
+            }
         )
     }
 }
