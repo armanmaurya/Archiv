@@ -13,16 +13,21 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -37,6 +42,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import com.example.pdfscanner.ui.scanner.components.CameraPreview
 import com.example.pdfscanner.ui.scanner.components.GalleryButton
@@ -68,11 +74,16 @@ fun ScannerScreen(
     var scannerErrorMessage by remember { mutableStateOf<String?>(null) }
     var isImportBusy by remember { mutableStateOf(false) }
     var isCameraBusy by remember { mutableStateOf(false) }
+    var isAutoEdgeDetectionEnabled by remember { mutableStateOf(true) }
     val isScreenBusy = viewModel.isSavingPdf || isImportBusy || isCameraBusy
 
     val visibleErrorMessage = scannerErrorMessage ?: viewModel.saveErrorMessage
 
-    Column(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
         Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
             CameraPreview(
                 captureRequestKey = captureRequestKey,
@@ -87,6 +98,7 @@ fun ScannerScreen(
                 onCapture = { uri, bounds -> viewModel.addPage(uri, bounds) },
                 onCameraBusyChange = { isBusy -> isCameraBusy = isBusy },
                 onCameraError = { message -> scannerErrorMessage = message },
+                isAutoEdgeDetectionEnabled = isAutoEdgeDetectionEnabled,
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -119,31 +131,58 @@ fun ScannerScreen(
                 enabled = !isScreenBusy
             )
 
-            SavePdfButton(
-                onSave = { viewModel.savePagesAsPdf(context, pdfStorage) },
-                enabled = !isScreenBusy && pages.isNotEmpty()
+            AutoEdgeDetectionButton(
+                isEnabled = isAutoEdgeDetectionEnabled,
+                enabled = !isScreenBusy,
+                onToggle = { isAutoEdgeDetectionEnabled = !isAutoEdgeDetectionEnabled }
             )
         }
 
-        ThumbnailStrip(
-            pages = pages,
-            onOpenEditor = onOpenEditor,
-            onDelete = { index -> pendingDeleteIndex = index },
-            onReorder = { from, to -> viewModel.reorderPages(from, to) },
-            scrollToIndexHint = scrollToIndexHint,
-            onScrollHintConsumed = onScrollHintConsumed,
-            sharedTransitionScope = sharedTransitionScope,
-            animatedVisibilityScope = animatedVisibilityScope,
-            sharedElementKeyForUri = sharedElementKeyForUri
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(96.dp)
+                .padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+            ) {
+                ThumbnailStrip(
+                    pages = pages,
+                    onOpenEditor = onOpenEditor,
+                    onDelete = { index -> pendingDeleteIndex = index },
+                    onReorder = { from, to -> viewModel.reorderPages(from, to) },
+                    scrollToIndexHint = scrollToIndexHint,
+                    onScrollHintConsumed = onScrollHintConsumed,
+                    sharedTransitionScope = sharedTransitionScope,
+                    animatedVisibilityScope = animatedVisibilityScope,
+                    sharedElementKeyForUri = sharedElementKeyForUri
+                )
+            }
+
+            SavePdfButton(
+                onSave = { viewModel.savePagesAsPdf(context, pdfStorage) },
+                enabled = !isScreenBusy && pages.isNotEmpty(),
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(56.dp)
+                    .padding(vertical = 8.dp)
+            )
+        }
     } // Column (main background container)
 
     // Overlays for the whole screen
     if (isScreenBusy) {
         Box(
-                modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)),
+                modifier = Modifier.fillMaxSize().background(
+                    MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f)
+                ),
                 contentAlignment = Alignment.Center
-        ) { CircularProgressIndicator(color = Color.White) }
+        ) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
     }
 
     pendingDeleteIndex?.let { index ->
@@ -198,6 +237,39 @@ private fun copyUriToCache(context: Context, uri: Uri): Uri? {
 }
 
 @Composable
+fun AutoEdgeDetectionButton(
+    isEnabled: Boolean,
+    onToggle: () -> Unit,
+    enabled: Boolean = true,
+    modifier: Modifier = Modifier
+) {
+    val backgroundColor = if (isEnabled) {
+        MaterialTheme.colorScheme.secondaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val textColor = if (isEnabled) {
+        MaterialTheme.colorScheme.onSecondaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Box(
+        modifier = modifier
+            .size(56.dp)
+            .clip(CircleShape)
+            .background(backgroundColor)
+            .clickable(enabled = enabled) { onToggle() },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = if (isEnabled) "Auto" else "Off",
+            color = textColor,
+            fontSize = 11.sp
+        )
+    }
+}
+
+@Composable
 fun ShutterButton(
     onCapture: () -> Unit,
     enabled: Boolean = true,
@@ -220,17 +292,29 @@ fun SavePdfButton(
     enabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    val backgroundColor = if (enabled) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val iconColor = if (enabled) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
     Box(
         modifier = modifier
-            .size(56.dp)
+            .defaultMinSize(minWidth = 56.dp, minHeight = 56.dp)
+            .clip(CircleShape)
+            .background(backgroundColor)
             .clickable(enabled = enabled) { onSave() },
         contentAlignment = Alignment.Center
     ) {
         Icon(
             Icons.Default.Check,
             contentDescription = "Save PDF",
-            tint = if (enabled) Color(0xFF67B5E8) else Color.Gray,
-            modifier = Modifier.size(40.dp)
+            tint = iconColor,
+            modifier = Modifier.size(28.dp)
         )
     }
 }

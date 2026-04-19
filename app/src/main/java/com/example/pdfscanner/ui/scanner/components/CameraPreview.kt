@@ -13,6 +13,7 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
+import androidx.camera.core.UseCase
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
@@ -195,6 +196,7 @@ fun CameraPreview(
         onCapture: (Uri, List<PointF>) -> Unit,
         onCameraBusyChange: (Boolean) -> Unit,
         onCameraError: (String?) -> Unit,
+        isAutoEdgeDetectionEnabled: Boolean,
         modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -233,7 +235,13 @@ fun CameraPreview(
         }
     }
 
-    LaunchedEffect(previewView, lifecycleOwner, hasCameraPermission) {
+    LaunchedEffect(isAutoEdgeDetectionEnabled) {
+        if (!isAutoEdgeDetectionEnabled) {
+            detectedCorners = null
+        }
+    }
+
+    LaunchedEffect(previewView, lifecycleOwner, hasCameraPermission, isAutoEdgeDetectionEnabled) {
         val targetPreviewView = previewView
         if (!hasCameraPermission || targetPreviewView == null) {
             imageCapture = null
@@ -248,6 +256,7 @@ fun CameraPreview(
                 frameProcessor = frameProcessor,
                 analyzerExecutor = analyzerExecutor,
                 previewView = targetPreviewView,
+                autoEdgeDetectionEnabled = isAutoEdgeDetectionEnabled,
                 onImageCaptureReady = { captureUseCase -> imageCapture = captureUseCase },
                 onCornersUpdated = { corners, aspect ->
                     if (corners != null && aspect != null) {
@@ -292,12 +301,15 @@ fun CameraPreview(
                 object : ImageCapture.OnImageSavedCallback {
                     override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
                         val savedUri = outputFile.toUri()
-                        val initialBounds =
-                                sanitizeInitialBounds(
-                                        currentDetectedCorners
-                                                ?.takeIf { it.size == 4 }
-                                                ?.let { orderCorners(it) }
-                                )
+                        val initialBounds = if (isAutoEdgeDetectionEnabled) {
+                            sanitizeInitialBounds(
+                                    currentDetectedCorners
+                                            ?.takeIf { it.size == 4 }
+                                            ?.let { orderCorners(it) }
+                            )
+                        } else {
+                            fullImageBounds()
+                        }
                         onCapture(savedUri, initialBounds)
                         onCameraBusyChange(false)
                     }
@@ -335,7 +347,9 @@ fun CameraPreview(
                         )
         )
 
-        DocumentOverlay(corners = detectedCorners, imageAspectRatio = imageAspectRatio)
+        if (isAutoEdgeDetectionEnabled) {
+            DocumentOverlay(corners = detectedCorners, imageAspectRatio = imageAspectRatio)
+        }
 
         CameraError(
                 message = errorMessage,
@@ -344,7 +358,7 @@ fun CameraPreview(
         )
 
         SearchingIndicator(
-                isVisible = detectedCorners == null,
+                isVisible = isAutoEdgeDetectionEnabled && detectedCorners == null,
                 modifier = Modifier.align(Alignment.BottomCenter)
         )
     }
@@ -356,6 +370,7 @@ private fun bindCameraPreview(
         frameProcessor: FrameProcessor,
         analyzerExecutor: ExecutorService,
         previewView: PreviewView,
+        autoEdgeDetectionEnabled: Boolean,
         onImageCaptureReady: (ImageCapture) -> Unit,
         onCornersUpdated: (List<PointF>?, Float?) -> Unit,
         onError: (String) -> Unit
@@ -377,69 +392,76 @@ private fun bindCameraPreview(
                                 .build()
                 onImageCaptureReady(imageCapture)
 
-                val imageAnalysis =
-                        ImageAnalysis.Builder()
-                                .setTargetAspectRatio(androidx.camera.core.AspectRatio.RATIO_4_3)
-                                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                                .build()
+                val useCases = mutableListOf<UseCase>(preview, imageCapture)
+                if (autoEdgeDetectionEnabled) {
+                    val imageAnalysis =
+                            ImageAnalysis.Builder()
+                                    .setTargetAspectRatio(androidx.camera.core.AspectRatio.RATIO_4_3)
+                                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                    .build()
 
-                var lastDetectedCorners: List<PointF>? = null
-                var lastAspectRatio: Float? = null
-                var strikeOutCount = 0
+                    var lastDetectedCorners: List<PointF>? = null
+                    var lastAspectRatio: Float? = null
+                    var strikeOutCount = 0
 
-                imageAnalysis.setAnalyzer(analyzerExecutor) { imageProxy ->
-                    try {
-                        val result = frameProcessor.processFrame(imageProxy)
-                        val smoothedResult =
-                                if (result != null) {
-                                    strikeOutCount = 0
-                                    val (rawCorners, aspect) = result
-                                    val sorted = frameProcessor.sortCornersClockwise(rawCorners)
-                                    val currentLast = lastDetectedCorners
-                                    val smoothed =
-                                            if (currentLast != null && currentLast.size == 4) {
-                                                sorted.mapIndexed { index, newPt ->
-                                                    val oldPt = currentLast[index]
-                                                    PointF(
-                                                            oldPt.x * 0.7f + newPt.x * 0.3f,
-                                                            oldPt.y * 0.7f + newPt.y * 0.3f
-                                                    )
+                    imageAnalysis.setAnalyzer(analyzerExecutor) { imageProxy ->
+                        try {
+                            val result = frameProcessor.processFrame(imageProxy)
+                            val smoothedResult =
+                                    if (result != null) {
+                                        strikeOutCount = 0
+                                        val (rawCorners, aspect) = result
+                                        val sorted = frameProcessor.sortCornersClockwise(rawCorners)
+                                        val currentLast = lastDetectedCorners
+                                        val smoothed =
+                                                if (currentLast != null && currentLast.size == 4) {
+                                                    sorted.mapIndexed { index, newPt ->
+                                                        val oldPt = currentLast[index]
+                                                        PointF(
+                                                                oldPt.x * 0.7f + newPt.x * 0.3f,
+                                                                oldPt.y * 0.7f + newPt.y * 0.3f
+                                                        )
+                                                    }
+                                                } else {
+                                                    sorted
                                                 }
-                                            } else {
-                                                sorted
-                                            }
 
-                                    lastDetectedCorners = smoothed
-                                    lastAspectRatio = aspect
-                                    Pair(smoothed, aspect)
-                                } else {
-                                    strikeOutCount++
-                                    if (strikeOutCount > 5) {
-                                        lastDetectedCorners = null
-                                        null
+                                        lastDetectedCorners = smoothed
+                                        lastAspectRatio = aspect
+                                        Pair(smoothed, aspect)
                                     } else {
-                                        val corners = lastDetectedCorners
-                                        val aspect = lastAspectRatio
-                                        if (corners != null && aspect != null) {
-                                            Pair(corners, aspect)
-                                        } else {
+                                        strikeOutCount++
+                                        if (strikeOutCount > 5) {
+                                            lastDetectedCorners = null
                                             null
+                                        } else {
+                                            val corners = lastDetectedCorners
+                                            val aspect = lastAspectRatio
+                                            if (corners != null && aspect != null) {
+                                                Pair(corners, aspect)
+                                            } else {
+                                                null
+                                            }
                                         }
                                     }
-                                }
 
-                        ContextCompat.getMainExecutor(context).execute {
-                            if (smoothedResult != null) {
-                                onCornersUpdated(smoothedResult.first, smoothedResult.second)
-                            } else {
-                                onCornersUpdated(null, null)
+                            ContextCompat.getMainExecutor(context).execute {
+                                if (smoothedResult != null) {
+                                    onCornersUpdated(smoothedResult.first, smoothedResult.second)
+                                } else {
+                                    onCornersUpdated(null, null)
+                                }
                             }
+                        } catch (e: Exception) {
+                            Log.e("detectDocumentCorners", "Error locating document corners", e)
+                        } finally {
+                            imageProxy.close()
                         }
-                    } catch (e: Exception) {
-                        Log.e("detectDocumentCorners", "Error locating document corners", e)
-                    } finally {
-                        imageProxy.close()
                     }
+
+                    useCases += imageAnalysis
+                } else {
+                    onCornersUpdated(null, null)
                 }
 
                 try {
@@ -447,9 +469,7 @@ private fun bindCameraPreview(
                     cameraProvider.bindToLifecycle(
                             lifecycleOwner,
                             CameraSelector.DEFAULT_BACK_CAMERA,
-                            preview,
-                            imageCapture,
-                            imageAnalysis
+                            *useCases.toTypedArray()
                     )
                 } catch (error: IllegalStateException) {
                     onError("Unable to bind camera: ${error.message ?: "unknown error"}")

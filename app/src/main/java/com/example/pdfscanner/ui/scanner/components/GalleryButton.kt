@@ -9,13 +9,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -24,6 +24,17 @@ fun GalleryButton(
         enabled: Boolean = true,
         modifier: Modifier = Modifier
 ) {
+    val backgroundColor = if (enabled) {
+        MaterialTheme.colorScheme.secondaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val iconColor = if (enabled) {
+        MaterialTheme.colorScheme.onSecondaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
     val pickImagesLauncher =
             rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
                 if (uris.isNotEmpty()) {
@@ -33,15 +44,15 @@ fun GalleryButton(
 
     Box(
             modifier =
-                    modifier.size(56.dp).clip(CircleShape).background(Color(0xFF005A8D)).clickable(
+                    modifier.size(56.dp).clip(CircleShape).background(backgroundColor).clickable(
                                     enabled = enabled
                             ) { pickImagesLauncher.launch("image/*") },
             contentAlignment = Alignment.Center
     ) {
         Icon(
-                imageVector = Icons.Default.Add,
+                imageVector = Icons.Default.PhotoLibrary,
                 contentDescription = "Open Gallery",
-                tint = Color.White,
+                tint = iconColor,
                 modifier = Modifier.size(28.dp)
         )
     }
