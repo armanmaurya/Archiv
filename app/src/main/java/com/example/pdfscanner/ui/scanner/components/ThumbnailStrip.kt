@@ -65,6 +65,11 @@ fun ThumbnailStrip(
     onReorder: (Int, Int) -> Unit,
     scrollToIndexHint: Int?,
     onScrollHintConsumed: () -> Unit,
+    modifier: Modifier = Modifier,
+    selectedIndex: Int? = null,
+    enableReorder: Boolean = true,
+    enabled: Boolean = true,
+    autoScrollToLastOnSizeChange: Boolean = true,
     sharedTransitionScope: SharedTransitionScope? = null,
     animatedVisibilityScope: AnimatedVisibilityScope? = null,
     sharedElementKeyForUri: (Uri) -> String = { uri -> "page-$uri" },
@@ -85,8 +90,14 @@ fun ThumbnailStrip(
     }
 
     LaunchedEffect(pages.size) {
-        if (pages.isNotEmpty()) {
+        if (autoScrollToLastOnSizeChange && pages.isNotEmpty()) {
             lazyListState.animateScrollToItem(pages.size - 1)
+        }
+    }
+
+    LaunchedEffect(selectedIndex, pages.size) {
+        if (selectedIndex != null && selectedIndex in pages.indices) {
+            lazyListState.animateScrollToItem(selectedIndex)
         }
     }
 
@@ -114,50 +125,57 @@ fun ThumbnailStrip(
 
     LazyRow(
         state = lazyListState,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .height(96.dp)
             .padding(horizontal = 16.dp, vertical = 8.dp)
-            .pointerInput(Unit) {
-                detectDragGesturesAfterLongPress(
-                    onDragStart = { offset ->
-                        isSettling = false
-                        val item = lazyListState.layoutInfo.visibleItemsInfo
-                            .firstOrNull { info ->
-                                offset.x >= info.offset &&
-                                    offset.x <= info.offset + info.size
-                            }
-                        draggingIndex = item?.index
-                        dragOffsetX = 0f
-                    },
-                    onDrag = { change, dragAmount ->
-                        change.consume()
-                        dragOffsetX += dragAmount.x
-                        val currentIndex = draggingIndex ?: return@detectDragGesturesAfterLongPress
-                        val visibleItems = lazyListState.layoutInfo.visibleItemsInfo
-                        val draggingItemInfo = visibleItems.firstOrNull { it.index == currentIndex }
-                            ?: return@detectDragGesturesAfterLongPress
-                        val draggingCenter = draggingItemInfo.offset + draggingItemInfo.size / 2 + dragOffsetX.toInt()
-                        val target = visibleItems.firstOrNull { info ->
-                            info.index != currentIndex &&
-                                draggingCenter >= info.offset &&
-                                draggingCenter <= info.offset + info.size
-                        }
-                        if (target != null) {
-                            dragOffsetX += (draggingItemInfo.offset - target.offset).toFloat()
-                            onReorder(currentIndex, target.index)
-                            draggingIndex = target.index
-                        }
-                    },
-                    onDragEnd = { isSettling = true },
-                    onDragCancel = { isSettling = true }
-                )
-            },
+            .then(
+                if (enableReorder) {
+                    Modifier.pointerInput(Unit) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { offset ->
+                                isSettling = false
+                                val item = lazyListState.layoutInfo.visibleItemsInfo
+                                    .firstOrNull { info ->
+                                        offset.x >= info.offset &&
+                                            offset.x <= info.offset + info.size
+                                    }
+                                draggingIndex = item?.index
+                                dragOffsetX = 0f
+                            },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                dragOffsetX += dragAmount.x
+                                val currentIndex = draggingIndex ?: return@detectDragGesturesAfterLongPress
+                                val visibleItems = lazyListState.layoutInfo.visibleItemsInfo
+                                val draggingItemInfo = visibleItems.firstOrNull { it.index == currentIndex }
+                                    ?: return@detectDragGesturesAfterLongPress
+                                val draggingCenter = draggingItemInfo.offset + draggingItemInfo.size / 2 + dragOffsetX.toInt()
+                                val target = visibleItems.firstOrNull { info ->
+                                    info.index != currentIndex &&
+                                        draggingCenter >= info.offset &&
+                                        draggingCenter <= info.offset + info.size
+                                }
+                                if (target != null) {
+                                    dragOffsetX += (draggingItemInfo.offset - target.offset).toFloat()
+                                    onReorder(currentIndex, target.index)
+                                    draggingIndex = target.index
+                                }
+                            },
+                            onDragEnd = { isSettling = true },
+                            onDragCancel = { isSettling = true }
+                        )
+                    }
+                } else {
+                    Modifier
+                }
+            ),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(pages, key = { it.uri.toString() }) { pageState ->
             val pageIndex = pages.indexOf(pageState)
             val isDragging = draggingIndex == pageIndex
+            val isSelected = selectedIndex == pageIndex
             Box(
                 modifier = Modifier.then(
                     if (!isDragging) Modifier.animateItem() else Modifier
@@ -168,6 +186,8 @@ fun ThumbnailStrip(
                     pageIndex = pageIndex,
                     isDragging = isDragging,
                     dragOffsetX = dragOffsetX,
+                    isSelected = isSelected,
+                    enabled = enabled,
                     onOpenEditor = onOpenEditor,
                     onDelete = onDelete,
                     sharedTransitionScope = sharedTransitionScope,
@@ -186,6 +206,8 @@ private fun ThumbnailItem(
     pageIndex: Int,
     isDragging: Boolean,
     dragOffsetX: Float,
+    isSelected: Boolean,
+    enabled: Boolean,
     onOpenEditor: (Int) -> Unit,
     onDelete: (Int) -> Unit,
     sharedTransitionScope: SharedTransitionScope? = null,
@@ -269,12 +291,16 @@ private fun ThumbnailItem(
             }
             .border(
                 width = 2.dp,
-                color = if (isDragging) Color.White else MaterialTheme.colorScheme.primary,
+                color = when {
+                    isDragging -> Color.White
+                    isSelected -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.outline
+                },
                 shape = RoundedCornerShape(8.dp)
             )
             .clip(RoundedCornerShape(8.dp))
             .background(Color.DarkGray)
-            .clickable(enabled = !hasError && !isDragging) {
+            .clickable(enabled = enabled && !hasError && !isDragging) {
                 if (pageIndex >= 0) {
                     onOpenEditor(pageIndex)
                 }
