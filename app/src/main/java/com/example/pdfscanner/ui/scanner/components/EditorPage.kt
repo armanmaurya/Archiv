@@ -6,9 +6,12 @@ import android.net.Uri
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -17,11 +20,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import com.example.pdfscanner.bitmap.decodeSampledBitmap
 import com.example.pdfscanner.bitmap.BitmapCache
 import com.example.pdfscanner.bitmap.applyBitmapFilter
@@ -73,6 +79,39 @@ fun EditorPage(
     val processedBitmapCache = remember(uri) { mutableMapOf<String, Bitmap>() }
     var containerWidth by remember(uri) { mutableStateOf(0) }
     var containerHeight by remember(uri) { mutableStateOf(0) }
+    var cropZoom by remember(uri) { mutableStateOf(1f) }
+    var cropOffset by remember(uri) { mutableStateOf(Offset.Zero) }
+    val isEditableCropPage = isCropMode && isCurrentPage
+    val cropGestureState = rememberTransformableState { zoomChange, panChange, _ ->
+        if (!isEditableCropPage) return@rememberTransformableState
+        val nextZoom = (cropZoom * zoomChange).coerceIn(1f, MAX_CROP_ZOOM)
+        val nextOffset = clampCropOffset(
+            offset = if (nextZoom > 1f) cropOffset + panChange else Offset.Zero,
+            zoom = nextZoom,
+            containerWidth = containerWidth,
+            containerHeight = containerHeight
+        )
+        cropZoom = nextZoom
+        cropOffset = nextOffset
+    }
+
+    LaunchedEffect(isEditableCropPage) {
+        if (!isEditableCropPage) {
+            cropZoom = 1f
+            cropOffset = Offset.Zero
+        }
+    }
+
+    LaunchedEffect(containerWidth, containerHeight, cropZoom, isEditableCropPage) {
+        if (isEditableCropPage) {
+            cropOffset = clampCropOffset(
+                offset = cropOffset,
+                zoom = cropZoom,
+                containerWidth = containerWidth,
+                containerHeight = containerHeight
+            )
+        }
+    }
 
     LaunchedEffect(uri) {
         BitmapCache.getPreview(cacheKey)?.let { baseBitmap = it }
@@ -109,15 +148,11 @@ fun EditorPage(
     }
 
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .onSizeChanged {
-                containerWidth = it.width
-                containerHeight = it.height
-            },
+        modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         displayedBitmap?.let { bitmapToShow ->
+            val cropSidePadding = if (isEditableCropPage) CROP_SIDE_PADDING else 0.dp
             val sharedImageModifier =
                 if (sharedTransitionScope != null && animatedVisibilityScope != null) {
                     with(sharedTransitionScope) {
@@ -129,29 +164,87 @@ fun EditorPage(
                 } else {
                     Modifier
                 }
-            Image(
-                bitmap = bitmapToShow,
-                contentDescription = "Captured image ${page + 1}",
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize().then(sharedImageModifier)
-            )
+            val cropTransformModifier =
+                if (isEditableCropPage) {
+                    Modifier
+                        .graphicsLayer {
+                            scaleX = cropZoom
+                            scaleY = cropZoom
+                            translationX = cropOffset.x
+                            translationY = cropOffset.y
+                        }
+                } else {
+                    Modifier
+                }
+            val cropGestureModifier =
+                if (isEditableCropPage) {
+                    Modifier.transformable(state = cropGestureState)
+                } else {
+                    Modifier
+                }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = cropSidePadding)
+                    .onSizeChanged {
+                        containerWidth = it.width
+                        containerHeight = it.height
+                    }
+                    .then(cropGestureModifier)
+                    .then(cropTransformModifier),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                    bitmap = bitmapToShow,
+                    contentDescription = "Captured image ${page + 1}",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize().then(sharedImageModifier)
+                )
+            }
 
-            if (isCropMode && isCurrentPage && baseBitmap != null) {
+            if (isEditableCropPage && baseBitmap != null) {
                 val overlaySourceBitmap = baseBitmap!!
                 val isOddQuarterTurn = (effectiveRotationTurns and 1) == 1
                 val overlayImageWidth =
                     if (isOddQuarterTurn) overlaySourceBitmap.height else overlaySourceBitmap.width
                 val overlayImageHeight =
                     if (isOddQuarterTurn) overlaySourceBitmap.width else overlaySourceBitmap.height
-                CropOverlay(
-                    bounds = editingBounds,
-                    imageWidth = overlayImageWidth,
-                    imageHeight = overlayImageHeight,
-                    containerWidth = containerWidth,
-                    containerHeight = containerHeight,
-                    onChange = onEditingBoundsChange
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = cropSidePadding)
+                        .then(cropTransformModifier)
+                ) {
+                    CropOverlay(
+                        bounds = editingBounds,
+                        imageWidth = overlayImageWidth,
+                        imageHeight = overlayImageHeight,
+                        containerWidth = containerWidth,
+                        containerHeight = containerHeight,
+                        onChange = onEditingBoundsChange
+                    )
+                }
             }
         }
     }
+}
+
+private const val MAX_CROP_ZOOM = 4f
+private val CROP_SIDE_PADDING = 20.dp
+
+private fun clampCropOffset(
+    offset: Offset,
+    zoom: Float,
+    containerWidth: Int,
+    containerHeight: Int
+): Offset {
+    if (zoom <= 1f || containerWidth <= 0 || containerHeight <= 0) {
+        return Offset.Zero
+    }
+    val maxX = containerWidth * (zoom - 1f) / 2f
+    val maxY = containerHeight * (zoom - 1f) / 2f
+    return Offset(
+        x = offset.x.coerceIn(-maxX, maxX),
+        y = offset.y.coerceIn(-maxY, maxY)
+    )
 }
