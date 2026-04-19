@@ -23,7 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -68,9 +68,9 @@ fun ScannerScreen(
     val pages = viewModel.pages
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val pdfStorage = remember(context) { ScannerPdfStorage(context) }
 
     var captureRequestKey by remember { mutableStateOf(0L) }
+    var openLastRequestToken by remember { mutableStateOf(0L) }
     var scannerErrorMessage by remember { mutableStateOf<String?>(null) }
     var isImportBusy by remember { mutableStateOf(false) }
     var isCameraBusy by remember { mutableStateOf(false) }
@@ -160,12 +160,14 @@ fun ScannerScreen(
                     onScrollHintConsumed = onScrollHintConsumed,
                     sharedTransitionScope = sharedTransitionScope,
                     animatedVisibilityScope = animatedVisibilityScope,
-                    sharedElementKeyForUri = sharedElementKeyForUri
+                    sharedElementKeyForUri = sharedElementKeyForUri,
+                    openAfterScrollRequestToken = openLastRequestToken,
+                    openAfterScrollIndex = pages.lastIndex
                 )
             }
 
-            SavePdfButton(
-                onSave = { viewModel.savePagesAsPdf(context, pdfStorage) },
+            OpenLastImageButton(
+                onOpenLast = { openLastRequestToken++ },
                 enabled = !isScreenBusy && pages.isNotEmpty(),
                 modifier = Modifier
                     .fillMaxHeight()
@@ -287,8 +289,8 @@ fun ShutterButton(
 }
 
 @Composable
-fun SavePdfButton(
-    onSave: () -> Unit,
+fun OpenLastImageButton(
+    onOpenLast: () -> Unit,
     enabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
@@ -307,12 +309,12 @@ fun SavePdfButton(
             .defaultMinSize(minWidth = 56.dp, minHeight = 56.dp)
             .clip(CircleShape)
             .background(backgroundColor)
-            .clickable(enabled = enabled) { onSave() },
+            .clickable(enabled = enabled) { onOpenLast() },
         contentAlignment = Alignment.Center
     ) {
         Icon(
-            Icons.Default.Check,
-            contentDescription = "Save PDF",
+            Icons.AutoMirrored.Filled.ArrowForward,
+            contentDescription = "Open last image",
             tint = iconColor,
             modifier = Modifier.size(28.dp)
         )

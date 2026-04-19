@@ -16,6 +16,8 @@ import androidx.camera.core.Preview
 import androidx.camera.core.UseCase
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,9 +49,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -83,55 +84,60 @@ private fun DocumentOverlay(
         imageAspectRatio: Float,
         modifier: Modifier = Modifier
 ) {
-    corners?.let { detectedCorners ->
-        if (detectedCorners.size == 4) {
-            Canvas(modifier = modifier.fillMaxSize()) {
-                val targetRatio = size.width / size.height
+    val detectedCorners = corners?.takeIf { it.size == 4 } ?: return
+    val animatedCorners = detectedCorners.mapIndexed { index, point ->
+        animateCornerPoint(point = point, label = "corner-$index")
+    }
 
-                val scaledWidth: Float
-                val scaledHeight: Float
-                val offsetX: Float
-                val offsetY: Float
+    val cornerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.95f)
+    Canvas(modifier = modifier.fillMaxSize()) {
+        val targetRatio = size.width / size.height
 
-                if (imageAspectRatio > targetRatio) {
-                    scaledHeight = size.height
-                    scaledWidth = size.height * imageAspectRatio
-                    offsetX = (size.width - scaledWidth) / 2f
-                    offsetY = 0f
-                } else {
-                    scaledWidth = size.width
-                    scaledHeight = size.width / imageAspectRatio
-                    offsetX = 0f
-                    offsetY = (size.height - scaledHeight) / 2f
-                }
+        val scaledWidth: Float
+        val scaledHeight: Float
+        val offsetX: Float
+        val offsetY: Float
 
-                val path = Path()
-                path.moveTo(
-                        detectedCorners[0].x * scaledWidth + offsetX,
-                        detectedCorners[0].y * scaledHeight + offsetY
-                )
-                path.lineTo(
-                        detectedCorners[1].x * scaledWidth + offsetX,
-                        detectedCorners[1].y * scaledHeight + offsetY
-                )
-                path.lineTo(
-                        detectedCorners[2].x * scaledWidth + offsetX,
-                        detectedCorners[2].y * scaledHeight + offsetY
-                )
-                path.lineTo(
-                        detectedCorners[3].x * scaledWidth + offsetX,
-                        detectedCorners[3].y * scaledHeight + offsetY
-                )
-                path.close()
+        if (imageAspectRatio > targetRatio) {
+            scaledHeight = size.height
+            scaledWidth = size.height * imageAspectRatio
+            offsetX = (size.width - scaledWidth) / 2f
+            offsetY = 0f
+        } else {
+            scaledWidth = size.width
+            scaledHeight = size.width / imageAspectRatio
+            offsetX = 0f
+            offsetY = (size.height - scaledHeight) / 2f
+        }
 
-                drawPath(
-                        path = path,
-                        color = Color(0xFF2196F3).copy(alpha = 0.9f),
-                        style = Stroke(width = 8f)
-                )
-            }
+        val cornerRadius = 14.dp.toPx()
+        animatedCorners.forEach { point ->
+            val center = Offset(
+                x = point.x * scaledWidth + offsetX,
+                y = point.y * scaledHeight + offsetY
+            )
+            drawCircle(
+                color = cornerColor,
+                radius = cornerRadius,
+                center = center
+            )
         }
     }
+}
+
+@Composable
+private fun animateCornerPoint(point: PointF, label: String): PointF {
+    val animatedX by animateFloatAsState(
+        targetValue = point.x,
+        animationSpec = tween(durationMillis = 120),
+        label = "$label-x"
+    )
+    val animatedY by animateFloatAsState(
+        targetValue = point.y,
+        animationSpec = tween(durationMillis = 120),
+        label = "$label-y"
+    )
+    return PointF(animatedX, animatedY)
 }
 
 @Composable
