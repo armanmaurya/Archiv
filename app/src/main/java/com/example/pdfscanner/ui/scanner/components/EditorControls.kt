@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -36,6 +37,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -70,8 +73,18 @@ fun EditorControls(
     bottomContent: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val controlsVisibilityState = remember { MutableTransitionState(false) }
+    LaunchedEffect(visible) {
+        controlsVisibilityState.targetState = visible
+    }
+    val isBottomContentVisible = mode == EditorControlMode.Default && bottomContent != null
+    val bottomContentVisibilityState = remember { MutableTransitionState(false) }
+    LaunchedEffect(isBottomContentVisible) {
+        bottomContentVisibilityState.targetState = isBottomContentVisible
+    }
+
     AnimatedVisibility(
-        visible = visible,
+        visibleState = controlsVisibilityState,
         modifier = modifier.fillMaxWidth(),
         enter = fadeIn() + slideInVertically { it / 2 },
         exit = fadeOut() + slideOutVertically { it / 2 }
@@ -143,7 +156,7 @@ fun EditorControls(
                 }
 
                 AnimatedVisibility(
-                    visible = mode == EditorControlMode.Default && bottomContent != null,
+                    visibleState = bottomContentVisibilityState,
                     enter = fadeIn() + expandVertically(expandFrom = Alignment.Top),
                     exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top)
                 ) {

@@ -9,6 +9,7 @@ import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -43,6 +44,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -63,7 +65,6 @@ import com.example.pdfscanner.ui.scanner.components.GalleryButton
 import com.example.pdfscanner.ui.scanner.components.StepIndicator
 import com.example.pdfscanner.ui.scanner.components.ThumbnailStrip
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -73,13 +74,29 @@ fun EditorScreen (
     viewModel: ScannerViewModel,
     initialPage: Int,
     onBack: () -> Unit,
+    onOpenDocumentList: () -> Unit,
     sharedTransitionScope: SharedTransitionScope? = null,
     animatedVisibilityScope: AnimatedVisibilityScope? = null,
     sharedElementKeyForUri: (Uri) -> String = { uri -> "page-$uri" }
 ) {
     val pages = viewModel.pages
+    val pendingSavedDocumentId = viewModel.pendingSavedDocumentId
+    var navigatedToDocumentListAfterSave by remember { mutableStateOf(false) }
+
+    LaunchedEffect(pendingSavedDocumentId) {
+        if (pendingSavedDocumentId != null) {
+            navigatedToDocumentListAfterSave = true
+            viewModel.consumeSavedDocumentEvent()
+            onOpenDocumentList()
+        }
+    }
+
     if (pages.isEmpty()) {
-        LaunchedEffect(Unit) { onBack() }
+        LaunchedEffect(pendingSavedDocumentId, navigatedToDocumentListAfterSave) {
+            if (pendingSavedDocumentId == null && !navigatedToDocumentListAfterSave) {
+                onBack()
+            }
+        }
         return
     }
 
@@ -90,7 +107,6 @@ fun EditorScreen (
     var editingBounds by remember { mutableStateOf(fullImageBounds()) }
     var editingRotationTurns by remember { mutableIntStateOf(0) }
     var editingFilterMode by remember { mutableIntStateOf(FilterMode.NONE) }
-    var controlsVisible by remember { mutableStateOf(false) }
     var pendingDeleteIndex by remember { mutableStateOf<Int?>(null) }
     var isImportBusy by remember { mutableStateOf(false) }
     var filterPreviewBaseBitmap by remember { mutableStateOf<Bitmap?>(null) }
@@ -149,6 +165,7 @@ fun EditorScreen (
     val topChipColor = MaterialTheme.colorScheme.secondaryContainer
     val topChipContentColor = MaterialTheme.colorScheme.onSecondaryContainer
     val topChipHeight = 44.dp
+    val topControlsClearance = topChipHeight + 32.dp
     val topChipTextStyle = MaterialTheme.typography.titleMedium
 
     fun handleTopAction() {
@@ -167,12 +184,6 @@ fun EditorScreen (
         if (pagerState.currentPage > pages.lastIndex) {
             pagerState.animateScrollToPage(pages.lastIndex)
         }
-    }
-
-    LaunchedEffect(Unit) {
-        controlsVisible = false
-        delay(180)
-        controlsVisible = true
     }
 
     LaunchedEffect(pagerState.currentPage, pages) {
@@ -224,23 +235,97 @@ fun EditorScreen (
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        HorizontalPager(
-            state = pagerState,
-            userScrollEnabled = mode == Mode.DEFAULT,
-            modifier = Modifier.fillMaxSize()
-        ) { page ->
-            EditorPage(
-                page = page,
-                currentPage = pagerState.currentPage,
-                pageState = pages[page],
-                mode = mode,
-                editingBounds = editingBounds,
-                editingRotationTurns = editingRotationTurns,
-                editingFilterMode = editingFilterMode,
-                sharedTransitionScope = sharedTransitionScope,
-                animatedVisibilityScope = animatedVisibilityScope,
-                sharedElementKeyForUri = sharedElementKeyForUri,
-                onEditingBoundsChange = { editingBounds = it }
+        Column(modifier = Modifier.fillMaxSize()) {
+            HorizontalPager(
+                state = pagerState,
+                userScrollEnabled = mode == Mode.DEFAULT,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(top = topControlsClearance)
+            ) { page ->
+                EditorPage(
+                    page = page,
+                    currentPage = pagerState.currentPage,
+                    pageState = pages[page],
+                    mode = mode,
+                    editingBounds = editingBounds,
+                    editingRotationTurns = editingRotationTurns,
+                    editingFilterMode = editingFilterMode,
+                    sharedTransitionScope = sharedTransitionScope,
+                    animatedVisibilityScope = animatedVisibilityScope,
+                    sharedElementKeyForUri = sharedElementKeyForUri,
+                    onEditingBoundsChange = { editingBounds = it }
+                )
+            }
+
+            EditorControls(
+                visible = true,
+                mode = controlMode,
+                selectedFilter = editingFilterMode,
+                nonePreview = nonePreview,
+                bwPreview = bwPreview,
+                sepiaPreview = sepiaPreview,
+                onStartEdit = ::startCrop,
+                onStartFilter = ::startFilter,
+                onResetCrop = { editingBounds = fullImageBounds() },
+                onRotate = ::rotateCropClockwise,
+                onApplyCrop = ::applyCrop,
+                onClearFilter = { editingFilterMode = FilterMode.NONE },
+                onSelectBw = { editingFilterMode = FilterMode.BW },
+                onSelectSepia = { editingFilterMode = FilterMode.SEPIA },
+                onApplyFilter = ::applyFilter,
+                bottomContent = {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(96.dp)
+                            .padding(horizontal = 8.dp)
+                    ) {
+                        ThumbnailStrip(
+                            pages = pages,
+                            onOpenEditor = { index ->
+                                if (index in pages.indices && index != pagerState.currentPage) {
+                                    coroutineScope.launch { pagerState.animateScrollToPage(index) }
+                                }
+                            },
+                            onDelete = { index -> pendingDeleteIndex = index },
+                            onReorder = { _, _ -> },
+                            scrollToIndexHint = null,
+                            onScrollHintConsumed = {},
+                            selectedIndex = pagerState.currentPage,
+                            enableReorder = false,
+                            enabled = mode == Mode.DEFAULT && !isImportBusy,
+                            autoScrollToLastOnSizeChange = false,
+                            sharedTransitionScope = null,
+                            animatedVisibilityScope = null,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(end = 64.dp)
+                        )
+                        GalleryButton(
+                            onImagesSelected = { uris ->
+                                isImportBusy = true
+                                coroutineScope.launch {
+                                    val copiedUris = withContext(Dispatchers.IO) {
+                                        uris.mapNotNull { uri -> copyUriToCache(context, uri) }
+                                    }
+                                    copiedUris.forEach { uri -> viewModel.addPage(uri) }
+                                    isImportBusy = false
+                                }
+                            },
+                            enabled = mode == Mode.DEFAULT && !viewModel.isSavingPdf && !isImportBusy,
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .fillMaxHeight()
+                                .width(56.dp)
+                                .padding(vertical = 8.dp)
+                        )
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
             )
         }
 
@@ -281,14 +366,27 @@ fun EditorScreen (
                 contentColor = topChipContentColor
             )
         ) {
-            Text(
-                text = when {
-                    mode != Mode.DEFAULT -> "Done"
-                    viewModel.isSavingPdf -> "Saving..."
-                    else -> "Save"
-                },
-                style = topChipTextStyle
-            )
+            when {
+                viewModel.isSavingPdf -> {
+                    CircularProgressIndicator(
+                        color = topChipContentColor,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                mode != Mode.DEFAULT -> {
+                    Text(
+                        text = "Done",
+                        style = topChipTextStyle
+                    )
+                }
+                else -> {
+                    Text(
+                        text = "Save",
+                        style = topChipTextStyle
+                    )
+                }
+            }
         }
 
         StepIndicator(
@@ -301,74 +399,6 @@ fun EditorScreen (
             contentColor = topChipContentColor
         )
 
-        EditorControls(
-            visible = controlsVisible,
-            mode = controlMode,
-            selectedFilter = editingFilterMode,
-            nonePreview = nonePreview,
-            bwPreview = bwPreview,
-            sepiaPreview = sepiaPreview,
-            onStartEdit = ::startCrop,
-            onStartFilter = ::startFilter,
-            onResetCrop = { editingBounds = fullImageBounds() },
-            onRotate = ::rotateCropClockwise,
-            onApplyCrop = ::applyCrop,
-            onClearFilter = { editingFilterMode = FilterMode.NONE },
-            onSelectBw = { editingFilterMode = FilterMode.BW },
-            onSelectSepia = { editingFilterMode = FilterMode.SEPIA },
-            onApplyFilter = ::applyFilter,
-            bottomContent = {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(96.dp)
-                        .padding(horizontal = 8.dp)
-                ) {
-                    ThumbnailStrip(
-                        pages = pages,
-                        onOpenEditor = { index ->
-                            if (index in pages.indices && index != pagerState.currentPage) {
-                                coroutineScope.launch { pagerState.animateScrollToPage(index) }
-                            }
-                        },
-                        onDelete = { index -> pendingDeleteIndex = index },
-                        onReorder = { _, _ -> },
-                        scrollToIndexHint = null,
-                        onScrollHintConsumed = {},
-                        selectedIndex = pagerState.currentPage,
-                        enableReorder = false,
-                        enabled = mode == Mode.DEFAULT && !isImportBusy,
-                        autoScrollToLastOnSizeChange = false,
-                        sharedTransitionScope = null,
-                        animatedVisibilityScope = null,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(end = 64.dp)
-                    )
-                    GalleryButton(
-                        onImagesSelected = { uris ->
-                            isImportBusy = true
-                            coroutineScope.launch {
-                                val copiedUris = withContext(Dispatchers.IO) {
-                                    uris.mapNotNull { uri -> copyUriToCache(context, uri) }
-                                }
-                                copiedUris.forEach { uri -> viewModel.addPage(uri) }
-                                isImportBusy = false
-                            }
-                        },
-                        enabled = mode == Mode.DEFAULT && !viewModel.isSavingPdf && !isImportBusy,
-                        modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .fillMaxHeight()
-                            .width(56.dp)
-                            .padding(vertical = 8.dp)
-                    )
-                }
-            },
-            modifier = Modifier.align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-        )
     }
 
     pendingDeleteIndex?.let { index ->
