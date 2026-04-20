@@ -1,6 +1,7 @@
 package com.example.pdfscanner.ui.scanner
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.pdf.PdfDocument
 import android.graphics.PointF
 import android.net.Uri
@@ -9,9 +10,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.pdfscanner.bitmap.applyBitmapFilter
 import com.example.pdfscanner.bitmap.decodeSampledBitmap
 import com.example.pdfscanner.bitmap.FilterMode
 import com.example.pdfscanner.bitmap.fullImageBounds
+import com.example.pdfscanner.bitmap.rotateBitmapQuarterTurns
+import com.example.pdfscanner.bitmap.warpBitmapWithQuad
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
@@ -102,8 +106,8 @@ class ScannerViewModel : ViewModel() {
     }
 
     fun savePagesAsPdf(context: Context, storage: ScannerPdfStorage) {
-        val pageUris = pages.map { it.uri }
-        if (pageUris.isEmpty()) {
+        val pagesToSave = pages
+        if (pagesToSave.isEmpty()) {
             saveErrorMessage = "Capture at least one page before saving."
             return
         }
@@ -116,9 +120,8 @@ class ScannerViewModel : ViewModel() {
                 val pdfBytes = withContext(Dispatchers.IO) {
                     val pdfDocument = PdfDocument()
                     try {
-                        pageUris.forEachIndexed { index, imageUri ->
-                            val bitmap = decodeSampledBitmap(context, imageUri)
-                                ?: throw IOException("Unable to decode captured page: $imageUri")
+                        pagesToSave.forEachIndexed { index, pageState ->
+                            val bitmap = renderPageForPdf(context, pageState)
                             val page = pdfDocument.startPage(
                                 PdfDocument.PageInfo.Builder(bitmap.width, bitmap.height, index + 1).create()
                             )
@@ -150,6 +153,37 @@ class ScannerViewModel : ViewModel() {
                 saveErrorMessage = error.message ?: "Permission denied while saving PDF."
             } finally {
                 isSavingPdf = false
+            }
+        }
+    }
+
+    private fun renderPageForPdf(context: Context, pageState: PageState): Bitmap {
+        val decodedBitmap = decodeSampledBitmap(context, pageState.uri)
+            ?: throw IOException("Unable to decode captured page: ${pageState.uri}")
+        var rotatedBitmap = decodedBitmap
+        var filteredBitmap = decodedBitmap
+        var warpedBitmap: Bitmap? = null
+        var outputBitmap: Bitmap? = null
+
+        try {
+            val normalizedRotation = ((pageState.rotation % 4) + 4) % 4
+            rotatedBitmap = rotateBitmapQuarterTurns(decodedBitmap, normalizedRotation)
+            filteredBitmap = applyBitmapFilter(rotatedBitmap, pageState.filter)
+            warpedBitmap = warpBitmapWithQuad(filteredBitmap, pageState.cropBounds)
+            outputBitmap = warpedBitmap ?: filteredBitmap
+            return outputBitmap
+        } finally {
+            if (decodedBitmap !== outputBitmap && !decodedBitmap.isRecycled) {
+                decodedBitmap.recycle()
+            }
+            if (rotatedBitmap !== decodedBitmap && rotatedBitmap !== outputBitmap && !rotatedBitmap.isRecycled) {
+                rotatedBitmap.recycle()
+            }
+            if (filteredBitmap !== rotatedBitmap && filteredBitmap !== outputBitmap && !filteredBitmap.isRecycled) {
+                filteredBitmap.recycle()
+            }
+            if (warpedBitmap != null && warpedBitmap !== outputBitmap && !warpedBitmap.isRecycled) {
+                warpedBitmap.recycle()
             }
         }
     }
