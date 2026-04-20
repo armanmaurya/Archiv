@@ -1,14 +1,15 @@
 package com.example.pdfscanner.navigation
 
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
@@ -22,6 +23,8 @@ import androidx.navigation.navArgument
 import com.example.pdfscanner.ui.scanner.ScannerScreen
 import com.example.pdfscanner.ui.scanner.ScannerViewModel
 import com.example.pdfscanner.ui.scanner.EditorScreen
+import com.example.pdfscanner.ui.document.DocumentListScreen
+import com.example.pdfscanner.ui.document.DocumentViewModel
 
 @Composable
 inline fun <reified T : ViewModel> NavBackStackEntry.sharedViewModel(
@@ -39,22 +42,43 @@ inline fun <reified T : ViewModel> NavBackStackEntry.sharedViewModel(
 fun AppNavHost(
 ) {
     val navController = rememberNavController()
+    val context = LocalContext.current
     var scrollToIndexHint by remember { mutableStateOf<Int?>(null) }
 
     SharedTransitionLayout {
-        NavHost(navController = navController, startDestination = "scanner_flow") {
+        NavHost(navController = navController, startDestination = Screen.DOCUMENTS) {
+
+            composable(
+                route = Screen.DOCUMENTS,
+                enterTransition = { slideInHorizontally(initialOffsetX = { it }) },
+                exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) },
+                popEnterTransition = { slideInHorizontally(initialOffsetX = { -it }) },
+                popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) }
+            ) {
+                val documentViewModel: DocumentViewModel = viewModel(
+                    factory = DocumentViewModel.factory(context)
+                )
+
+                DocumentListScreen(
+                    viewModel = documentViewModel,
+                    onOpenScanner = {
+                        navController.navigate(Screen.SCANNER_FLOW) {
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
 
             navigation(
                 startDestination = Screen.CAMERA,
-                route = "scanner_flow"
+                route = Screen.SCANNER_FLOW
             ) {
-                
                 composable(
                     route = Screen.CAMERA,
-                    enterTransition = { fadeIn() },
-                    exitTransition = { fadeOut() },
-                    popEnterTransition = { fadeIn() },
-                    popExitTransition = { fadeOut() }
+                    enterTransition = { slideInHorizontally(initialOffsetX = { it }) },
+                    exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) },
+                    popEnterTransition = { slideInHorizontally(initialOffsetX = { -it }) },
+                    popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) }
                 ) { backStackEntry ->
                     
                     val viewModel: ScannerViewModel = backStackEntry.sharedViewModel(navController)
@@ -64,6 +88,7 @@ fun AppNavHost(
                         onOpenEditor = { startIndex ->
                             navController.navigate(Screen.editorRoute(startIndex))
                         },
+                        onExitScanner = { navController.popBackStack() },
                         scrollToIndexHint = scrollToIndexHint,
                         onScrollHintConsumed = { scrollToIndexHint = null },
                         sharedTransitionScope = this@SharedTransitionLayout,
@@ -80,10 +105,10 @@ fun AppNavHost(
                             defaultValue = 0
                         }
                     ),
-                    enterTransition = { fadeIn() },
-                    exitTransition = { fadeOut() },
-                    popEnterTransition = { fadeIn() },
-                    popExitTransition = { fadeOut() }
+                    enterTransition = { slideInHorizontally(initialOffsetX = { it }) },
+                    exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) },
+                    popEnterTransition = { slideInHorizontally(initialOffsetX = { -it }) },
+                    popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) }
                 ) { backStackEntry ->
                     
                     val viewModel: ScannerViewModel = backStackEntry.sharedViewModel(navController)
@@ -94,6 +119,12 @@ fun AppNavHost(
                         viewModel = viewModel,
                         initialPage = startIndex,
                         onBack = { navController.popBackStack() },
+                        onOpenDocumentList = {
+                            navController.navigate(Screen.DOCUMENTS) {
+                                popUpTo(Screen.DOCUMENTS) { inclusive = false }
+                                launchSingleTop = true
+                            }
+                        },
                         sharedTransitionScope = this@SharedTransitionLayout,
                         animatedVisibilityScope = this,
                         sharedElementKeyForUri = { uri -> "page-$uri" }

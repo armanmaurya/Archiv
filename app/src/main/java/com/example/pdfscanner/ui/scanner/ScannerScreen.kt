@@ -1,6 +1,7 @@
 package com.example.pdfscanner.ui.scanner
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
@@ -53,6 +54,7 @@ import kotlinx.coroutines.withContext
 fun ScannerScreen(
         viewModel: ScannerViewModel,
         onOpenEditor: (Int) -> Unit,
+        onExitScanner: () -> Unit,
         scrollToIndexHint: Int? = null,
         onScrollHintConsumed: () -> Unit = {},
         sharedTransitionScope: SharedTransitionScope? = null,
@@ -60,6 +62,7 @@ fun ScannerScreen(
         sharedElementKeyForUri: (Uri) -> String = { uri -> "page-$uri" }
 ) {
     var pendingDeleteIndex by remember { mutableStateOf<Int?>(null) }
+    var showExitConfirmation by remember { mutableStateOf(false) }
     val pages = viewModel.pages
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -73,6 +76,23 @@ fun ScannerScreen(
     val isScreenBusy = viewModel.isSavingPdf || isImportBusy || isCameraBusy
 
     val visibleErrorMessage = scannerErrorMessage ?: viewModel.saveErrorMessage
+
+    fun handleExitAttempt() {
+        if (isScreenBusy) return
+        if (pages.isEmpty()) {
+            onExitScanner()
+        } else {
+            showExitConfirmation = true
+        }
+    }
+
+    BackHandler {
+        if (showExitConfirmation) {
+            showExitConfirmation = false
+        } else {
+            handleExitAttempt()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -200,6 +220,26 @@ fun ScannerScreen(
                 dismissButton = {
                     TextButton(onClick = { pendingDeleteIndex = null }) { Text("Cancel") }
                 }
+        )
+    }
+
+    if (showExitConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showExitConfirmation = false },
+            title = { Text("Discard current scan?") },
+            text = { Text("You have captured images. Exit scanner and discard them?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showExitConfirmation = false
+                        viewModel.clearPages()
+                        onExitScanner()
+                    }
+                ) { Text("Discard") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExitConfirmation = false }) { Text("Cancel") }
+            }
         )
     }
 }

@@ -43,6 +43,8 @@ class ScannerViewModel : ViewModel() {
         private set
     var saveErrorMessage by mutableStateOf<String?>(null)
         private set
+    var pendingSavedDocumentId by mutableStateOf<String?>(null)
+        private set
 
     fun addPage(
         uri: Uri,
@@ -105,6 +107,10 @@ class ScannerViewModel : ViewModel() {
         saveErrorMessage = null
     }
 
+    fun consumeSavedDocumentEvent() {
+        pendingSavedDocumentId = null
+    }
+
     fun savePagesAsPdf(context: Context, storage: ScannerPdfStorage) {
         val pagesToSave = pages
         if (pagesToSave.isEmpty()) {
@@ -143,9 +149,10 @@ class ScannerViewModel : ViewModel() {
                         pdfDocument.close()
                     }
                 }
-                withContext(Dispatchers.IO) {
+                val savedFile = withContext(Dispatchers.IO) {
                     storage.savePdf(pdfBytes)
                 }
+                pendingSavedDocumentId = savedFile.name
                 clearPages()
             } catch (error: IOException) {
                 saveErrorMessage = error.message ?: "Failed to save PDF."
