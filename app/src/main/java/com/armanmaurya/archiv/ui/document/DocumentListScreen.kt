@@ -1,6 +1,7 @@
 package com.armanmaurya.archiv.ui.document
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -16,12 +17,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -45,7 +48,8 @@ import com.armanmaurya.archiv.ui.document.components.DocumentItem
 @Composable
 fun DocumentListScreen(
     viewModel: DocumentViewModel,
-    onOpenScanner: () -> Unit
+    onOpenScanner: () -> Unit,
+    onOpenSettings: () -> Unit
 ) {
     val context = LocalContext.current
     val documents = viewModel.documents
@@ -98,7 +102,15 @@ fun DocumentListScreen(
         },
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Archiv") }
+                title = { Text("Archiv") },
+                actions = {
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(
+                            imageVector = Icons.Outlined.Settings,
+                            contentDescription = "Settings"
+                        )
+                    }
+                }
             )
         }
     ) { innerPadding ->
@@ -130,6 +142,18 @@ fun DocumentListScreen(
                             DocumentItem(
                                 document = document,
                                 actionEnabled = !viewModel.isLoading,
+                                onOpen = {
+                                    val openIntent = viewModel.createOpenIntent(document.id)
+                                    if (openIntent != null) {
+                                        try {
+                                            context.startActivity(
+                                                Intent.createChooser(openIntent, "Open scan")
+                                            )
+                                        } catch (_: ActivityNotFoundException) {
+                                            viewModel.onOpenAppUnavailable()
+                                        }
+                                    }
+                                },
                                 onShare = {
                                     val shareIntent = viewModel.createShareIntent(document.id)
                                     if (shareIntent != null) {

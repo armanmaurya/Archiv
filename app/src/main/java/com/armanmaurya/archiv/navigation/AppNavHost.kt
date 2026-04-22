@@ -25,6 +25,8 @@ import com.armanmaurya.archiv.ui.scanner.ScannerViewModel
 import com.armanmaurya.archiv.ui.scanner.EditorScreen
 import com.armanmaurya.archiv.ui.document.DocumentListScreen
 import com.armanmaurya.archiv.ui.document.DocumentViewModel
+import com.armanmaurya.archiv.ui.settings.SettingsScreen
+import com.armanmaurya.archiv.ui.settings.AboutScreen
 
 @Composable
 inline fun <reified T : ViewModel> NavBackStackEntry.sharedViewModel(
@@ -65,6 +67,11 @@ fun AppNavHost(
                         navController.navigate(Screen.SCANNER_FLOW) {
                             launchSingleTop = true
                         }
+                    },
+                    onOpenSettings = {
+                        navController.navigate(Screen.SETTINGS) {
+                            launchSingleTop = true
+                        }
                     }
                 )
             }
@@ -80,7 +87,7 @@ fun AppNavHost(
                     popEnterTransition = { slideInHorizontally(initialOffsetX = { -it }) },
                     popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) }
                 ) { backStackEntry ->
-                    
+
                     val viewModel: ScannerViewModel = backStackEntry.sharedViewModel(navController)
 
                     ScannerScreen(
@@ -110,11 +117,11 @@ fun AppNavHost(
                     popEnterTransition = { slideInHorizontally(initialOffsetX = { -it }) },
                     popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) }
                 ) { backStackEntry ->
-                    
+
                     val viewModel: ScannerViewModel = backStackEntry.sharedViewModel(navController)
-                    
+
                     val startIndex = backStackEntry.arguments?.getInt(Screen.EDITOR_START_ARG) ?: 0
-                    
+
                     EditorScreen(
                         viewModel = viewModel,
                         initialPage = startIndex,
@@ -130,6 +137,37 @@ fun AppNavHost(
                         sharedElementKeyForUri = { uri -> "page-$uri" }
                     )
                 }
+            }
+
+            composable(
+                route = Screen.SETTINGS,
+                enterTransition = { slideInHorizontally(initialOffsetX = { it }) },
+                exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) },
+                popEnterTransition = { slideInHorizontally(initialOffsetX = { -it }) },
+                popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) }
+            ) {
+                SettingsScreen(
+                    onBackClick = {
+                        navController.popBackStack()
+                    },
+                    onAboutClick = {
+                        navController.navigate(Screen.ABOUT)
+                    }
+                )
+            }
+
+            composable(
+                route = Screen.ABOUT,
+                enterTransition = { slideInHorizontally(initialOffsetX = { it }) },
+                exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) },
+                popEnterTransition = { slideInHorizontally(initialOffsetX = { -it }) },
+                popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) }
+            ) {
+                AboutScreen(
+                    onBackClick = {
+                        navController.popBackStack()
+                    }
+                )
             }
         }
     }

@@ -5,6 +5,7 @@ import android.graphics.fonts.Font
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -54,12 +55,17 @@ import kotlinx.coroutines.withContext
 fun DocumentItem(
     document: Document,
     actionEnabled: Boolean,
+    onOpen: () -> Unit,
     onShare: () -> Unit,
     onExport: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    ElevatedCard(modifier = modifier.fillMaxWidth()) {
+    ElevatedCard(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(enabled = actionEnabled, onClick = onOpen)
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -80,7 +86,7 @@ fun DocumentItem(
                     .padding(vertical = 10.dp)
             ) {
                 Text(
-                    text = document.fileName,
+                    text = formatDisplayName(document.fileName),
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.Bold
                     )
@@ -224,6 +230,14 @@ private fun renderPdfFirstPageThumbnail(
 private fun formatTimestamp(timestampMillis: Long): String {
     return DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
         .format(Date(timestampMillis))
+}
+
+private fun formatDisplayName(fileName: String): String {
+    return if (fileName.endsWith(".pdf", ignoreCase = true)) {
+        fileName.dropLast(4)
+    } else {
+        fileName
+    }
 }
 
 private fun formatFileSize(bytes: Long): String {
