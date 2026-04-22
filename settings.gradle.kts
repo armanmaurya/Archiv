@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "PDFScanner"
+rootProject.name = "Archiv"
 include(":app")
