@@ -63,6 +63,19 @@ class DocumentViewModel(
         }
     }
 
+    fun createOpenIntent(documentId: String): Intent? {
+        return try {
+            val shareUri = repository.getShareUri(documentId)
+            Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(shareUri, "application/pdf")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+        } catch (error: IllegalArgumentException) {
+            errorMessage = error.message ?: "Unable to open this document."
+            null
+        }
+    }
+
     fun exportDocument(documentId: String) {
         viewModelScope.launch {
             isLoading = true
@@ -100,6 +113,10 @@ class DocumentViewModel(
 
     fun onExportPermissionDenied() {
         errorMessage = "Storage permission is required to export on this Android version."
+    }
+
+    fun onOpenAppUnavailable() {
+        errorMessage = "No PDF app found to open this document."
     }
 
     fun consumeErrorMessage() {

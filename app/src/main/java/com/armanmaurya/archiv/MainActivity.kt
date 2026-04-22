@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import com.armanmaurya.archiv.core.theme.PDFScannerTheme
 import com.armanmaurya.archiv.navigation.AppNavHost
+import com.armanmaurya.archiv.ui.settings.ThemeManager
 import org.opencv.android.OpenCVLoader
 
 class MainActivity : ComponentActivity() {
@@ -18,6 +19,8 @@ class MainActivity : ComponentActivity() {
         } else {
             Log.e("SCANNER", "OpenCV load failed.")
         }
+
+        ThemeManager.initTheme(this)
 
         enableEdgeToEdge()
         setContent {

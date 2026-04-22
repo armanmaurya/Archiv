@@ -11,6 +11,9 @@ import androidx.core.net.toUri
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class PdfStorage(context: Context) {
 
@@ -21,7 +24,7 @@ class PdfStorage(context: Context) {
             throw IOException("Generated PDF is empty.")
         }
         val outputDir = requireAppDocumentsDir()
-        val outputFile = buildUniqueFile(outputDir, "scan_${System.currentTimeMillis()}.pdf")
+        val outputFile = buildUniqueFile(outputDir, buildDefaultPdfName())
 
         FileOutputStream(outputFile).use { outputStream ->
             outputStream.write(pdfBytes)
@@ -154,7 +157,7 @@ class PdfStorage(context: Context) {
     }
 
     private fun buildUniqueFile(directory: File, desiredName: String): File {
-        val sanitizedName = desiredName.ifBlank { "scan_${System.currentTimeMillis()}.pdf" }
+        val sanitizedName = desiredName.ifBlank { buildDefaultPdfName() }
         val baseName = sanitizedName.substringBeforeLast('.', sanitizedName)
         val extension = sanitizedName.substringAfterLast('.', "pdf")
         var candidate = File(directory, "$baseName.$extension")
@@ -164,6 +167,12 @@ class PdfStorage(context: Context) {
             index++
         }
         return candidate
+    }
+
+    private fun buildDefaultPdfName(): String {
+        val timestamp = SimpleDateFormat("dd MMMM yyyy hh-mm a", Locale.ENGLISH)
+            .format(Date())
+        return "Archiv $timestamp.pdf"
     }
 }
 
