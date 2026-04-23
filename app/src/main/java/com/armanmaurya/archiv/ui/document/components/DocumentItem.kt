@@ -64,7 +64,8 @@ fun DocumentItem(
     ElevatedCard(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(enabled = actionEnabled, onClick = onOpen)
+            .clickable(enabled = actionEnabled, onClick = onOpen),
+        shape = RoundedCornerShape(8.dp)
     ) {
         Row(
             modifier = Modifier
@@ -150,7 +151,7 @@ private fun PdfThumbnail(
 
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(10.dp)),
+            .clip(RoundedCornerShape(8.dp)),
         contentAlignment = Alignment.Center
     ) {
         val image = thumbnail
@@ -165,7 +166,7 @@ private fun PdfThumbnail(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(RoundedCornerShape(10.dp)),
+                    .clip(RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(

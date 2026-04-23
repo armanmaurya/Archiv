@@ -1,7 +1,6 @@
 package com.armanmaurya.archiv.ui.scanner.components
 
 import android.Manifest
-import android.R
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -57,6 +56,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -64,6 +64,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.armanmaurya.archiv.R
 import com.armanmaurya.archiv.camera.FrameProcessor
 import com.armanmaurya.archiv.bitmap.fullImageBounds
 import com.armanmaurya.archiv.bitmap.orderCorners
@@ -357,9 +358,9 @@ fun CameraPreview(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text("Camera permission is required.", color = MaterialTheme.colorScheme.error)
+                Text(stringResource(R.string.camera_permission_required), color = MaterialTheme.colorScheme.error)
                 Button(onClick = { requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA) }) {
-                    Text("Grant permission")
+                    Text(stringResource(R.string.camera_permission_grant))
                 }
             }
         }

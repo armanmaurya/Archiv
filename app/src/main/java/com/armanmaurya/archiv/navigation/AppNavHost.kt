@@ -25,8 +25,9 @@ import com.armanmaurya.archiv.ui.scanner.ScannerViewModel
 import com.armanmaurya.archiv.ui.scanner.EditorScreen
 import com.armanmaurya.archiv.ui.document.DocumentListScreen
 import com.armanmaurya.archiv.ui.document.DocumentViewModel
-import com.armanmaurya.archiv.ui.settings.SettingsScreen
 import com.armanmaurya.archiv.ui.settings.AboutScreen
+import com.armanmaurya.archiv.ui.settings.SettingsScreen
+import com.armanmaurya.archiv.ui.settings.SettingsViewModel
 
 @Composable
 inline fun <reified T : ViewModel> NavBackStackEntry.sharedViewModel(
@@ -146,7 +147,12 @@ fun AppNavHost(
                 popEnterTransition = { slideInHorizontally(initialOffsetX = { -it }) },
                 popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) }
             ) {
+                val settingsViewModel: SettingsViewModel = viewModel(
+                    factory = SettingsViewModel.factory(context)
+                )
+
                 SettingsScreen(
+                    viewModel = settingsViewModel,
                     onBackClick = {
                         navController.popBackStack()
                     },

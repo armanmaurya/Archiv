@@ -44,7 +44,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.armanmaurya.archiv.R
 import com.armanmaurya.archiv.bitmap.FilterMode
 
 enum class EditorControlMode {
@@ -109,24 +111,24 @@ fun EditorControls(
                             EditorControlMode.Default -> {
                                 FilledTonalButton(onClick = onStartEdit, shape = RoundedCornerShape(50)) {
                                     Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Text("  Crop & Rotate")
+                                    Text(stringResource(R.string.editor_crop_rotate))
                                 }
 
                             FilledTonalButton(onClick = onStartFilter, shape = RoundedCornerShape(50)) {
                                 Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Text("  Filter")
+                                Text(stringResource(R.string.editor_filter))
                             }
                         }
 
                             EditorControlMode.Crop -> {
                                 FilledTonalButton(onClick = onResetCrop, shape = RoundedCornerShape(50)) {
                                     Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Text("  No Crop")
+                                    Text(stringResource(R.string.editor_no_crop))
                                 }
 
                                 FilledTonalButton(onClick = onRotate, shape = RoundedCornerShape(50)) {
                                     Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Text("  Rotate")
+                                    Text(stringResource(R.string.editor_rotate))
                                 }
                             }
 
