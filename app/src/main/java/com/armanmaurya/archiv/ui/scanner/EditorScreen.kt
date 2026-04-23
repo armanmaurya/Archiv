@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -50,6 +51,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import com.armanmaurya.archiv.R
 import com.armanmaurya.archiv.bitmap.FilterMode
 import com.armanmaurya.archiv.bitmap.decodeSampledBitmap
 import com.armanmaurya.archiv.bitmap.BitmapCache
@@ -404,8 +406,8 @@ fun EditorScreen (
     pendingDeleteIndex?.let { index ->
         AlertDialog(
             onDismissRequest = { pendingDeleteIndex = null },
-            title = { Text("Delete image?") },
-            text = { Text("This will remove the selected image from the current scan.") },
+            title = { Text(stringResource(R.string.editor_delete_image_title)) },
+            text = { Text(stringResource(R.string.editor_delete_image_message)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -414,10 +416,10 @@ fun EditorScreen (
                         }
                         pendingDeleteIndex = null
                     }
-                ) { Text("Delete") }
+                ) { Text(stringResource(R.string.editor_delete_confirm)) }
             },
             dismissButton = {
-                TextButton(onClick = { pendingDeleteIndex = null }) { Text("Cancel") }
+                TextButton(onClick = { pendingDeleteIndex = null }) { Text(stringResource(R.string.editor_delete_cancel)) }
             }
         )
     }

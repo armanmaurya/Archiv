@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -69,7 +70,7 @@ fun AboutScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("About Us") },
+                title = { Text(stringResource(R.string.about_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(
@@ -225,7 +226,7 @@ fun AboutScreen(
                     ) {
                         Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(28.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("View Contributors")
+                        Text(stringResource(R.string.about_view_contributors))
                     }
                 }
             }
@@ -250,7 +251,7 @@ fun AboutScreen(
                     modifier = Modifier.size(28.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("View on GitHub")
+                Text(stringResource(R.string.about_view_github))
             }
 
             Spacer(modifier = Modifier.height(32.dp))

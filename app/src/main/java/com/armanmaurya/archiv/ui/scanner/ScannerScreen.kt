@@ -40,8 +40,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.armanmaurya.archiv.R
 import com.armanmaurya.archiv.ui.scanner.components.CameraPreview
 import com.armanmaurya.archiv.ui.scanner.components.GalleryButton
 import com.armanmaurya.archiv.ui.scanner.components.ThumbnailStrip
@@ -205,8 +207,8 @@ fun ScannerScreen(
     pendingDeleteIndex?.let { index ->
         AlertDialog(
                 onDismissRequest = { pendingDeleteIndex = null },
-                title = { Text("Delete image?") },
-                text = { Text("This will remove the selected image from the current scan.") },
+                title = { Text(stringResource(R.string.scanner_delete_image_title)) },
+                text = { Text(stringResource(R.string.scanner_delete_image_message)) },
                 confirmButton = {
                     TextButton(
                             onClick = {
@@ -215,10 +217,10 @@ fun ScannerScreen(
                                 }
                                 pendingDeleteIndex = null
                             }
-                    ) { Text("Delete") }
+                    ) { Text(stringResource(R.string.scanner_delete_confirm)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { pendingDeleteIndex = null }) { Text("Cancel") }
+                    TextButton(onClick = { pendingDeleteIndex = null }) { Text(stringResource(R.string.scanner_exit_cancel)) }
                 }
         )
     }
@@ -226,8 +228,8 @@ fun ScannerScreen(
     if (showExitConfirmation) {
         AlertDialog(
             onDismissRequest = { showExitConfirmation = false },
-            title = { Text("Discard current scan?") },
-            text = { Text("You have captured images. Exit scanner and discard them?") },
+            title = { Text(stringResource(R.string.scanner_exit_title)) },
+            text = { Text(stringResource(R.string.scanner_exit_message)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -235,10 +237,10 @@ fun ScannerScreen(
                         viewModel.clearPages()
                         onExitScanner()
                     }
-                ) { Text("Discard") }
+                ) { Text(stringResource(R.string.scanner_exit_confirm)) }
             },
             dismissButton = {
-                TextButton(onClick = { showExitConfirmation = false }) { Text("Cancel") }
+                TextButton(onClick = { showExitConfirmation = false }) { Text(stringResource(R.string.scanner_exit_cancel)) }
             }
         )
     }

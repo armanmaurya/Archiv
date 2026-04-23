@@ -40,8 +40,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.armanmaurya.archiv.R
 import com.armanmaurya.archiv.ui.document.components.DocumentItem
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -97,12 +99,12 @@ fun DocumentListScreen(
                         contentDescription = null
                     )
                 },
-                text = { Text("Scan") }
+                text = { Text(stringResource(R.string.document_list_fab_scan)) }
             )
         },
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Archiv") },
+                title = { Text(stringResource(R.string.document_list_title)) },
                 actions = {
                     IconButton(onClick = onOpenSettings) {
                         Icon(
@@ -187,8 +189,8 @@ fun DocumentListScreen(
     pendingDeleteDocumentId?.let { documentId ->
         AlertDialog(
             onDismissRequest = { pendingDeleteDocumentId = null },
-            title = { Text("Delete document?") },
-            text = { Text("This removes the PDF from My Scans.") },
+            title = { Text(stringResource(R.string.document_delete_title)) },
+            text = { Text(stringResource(R.string.document_delete_message)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -196,12 +198,12 @@ fun DocumentListScreen(
                         pendingDeleteDocumentId = null
                     }
                 ) {
-                    Text("Delete")
+                    Text(stringResource(R.string.document_delete_confirm))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { pendingDeleteDocumentId = null }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.document_delete_cancel))
                 }
             }
         )
