@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App -->
+    <string name="app_name">Archiv</string>
+
+    <!-- Navigation -->
+    <string name="nav_scan">स्कैन करें</string>
+
+    <!-- Document List Screen -->
+    <string name="document_list_title">Archiv</string>
+    <string name="document_list_fab_scan">स्कैन करें</string>
+    <string name="document_delete_title">दस्तावेज़ हटाएं?</string>
+    <string name="document_delete_message">यह PDF को मेरे स्कैन से हटा देगा।</string>
+    <string name="document_delete_confirm">हटाएं</string>
+    <string name="document_delete_cancel">रद्द करें</string>
+
+    <!-- Scanner Screen -->
+    <string name="scanner_delete_image_title">छवि हटाएं?</string>
+    <string name="scanner_delete_image_message">यह चयनित छवि को वर्तमान स्कैन से हटा देगा।</string>
+    <string name="scanner_delete_confirm">हटाएं</string>
+    <string name="scanner_exit_title">वर्तमान स्कैन को त्यागें?</string>
+    <string name="scanner_exit_message">आपने छवियों को कैप्चर किया है। स्कैनर से बाहर निकलें और उन्हें त्यागें?</string>
+    <string name="scanner_exit_confirm">त्यागें</string>
+    <string name="scanner_exit_cancel">रद्द करें</string>
+
+    <!-- Editor Controls -->
+    <string name="editor_crop_rotate">  क्रॉप और घुमाएं</string>
+    <string name="editor_filter">  फ़िल्टर</string>
+    <string name="editor_no_crop">  क्रॉप नहीं</string>
+    <string name="editor_rotate">  घुमाएं</string>
+
+    <!-- Editor Screen -->
+    <string name="editor_delete_image_title">छवि हटाएं?</string>
+    <string name="editor_delete_image_message">यह चयनित छवि को वर्तमान स्कैन से हटा देगा।</string>
+    <string name="editor_delete_confirm">हटाएं</string>
+    <string name="editor_delete_cancel">रद्द करें</string>
+
+    <!-- Camera Preview -->
+    <string name="camera_permission_required">कैमरा अनुमति आवश्यक है।</string>
+    <string name="camera_permission_grant">अनुमति दें</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_title">सेटिंग्स</string>
+    <string name="settings_general_section">सामान्य</string>
+    <string name="settings_language_title">भाषा</string>
+    <string name="settings_appearance_section">उपस्थिति</string>
+    <string name="settings_theme_title">थीम</string>
+    <string name="settings_theme_dialog_title">थीम चुनें</string>
+    <string name="settings_theme_light">हल्का</string>
+    <string name="settings_theme_dark">गहरा</string>
+    <string name="settings_theme_system">सिस्टम</string>
+    <string name="settings_pure_black_title">शुद्ध काला</string>
+    <string name="settings_pure_black_subtitle">AMOLED थीम मोड सक्षम करें</string>
+    <string name="settings_dynamic_theme_title">गतिशील थीम सक्षम करें</string>
+    <string name="settings_dynamic_theme_subtitle">डिवाइस वॉलपेपर के आधार पर ऐप थीम बनाएं</string>
+    <string name="settings_about_section">बारे में</string>
+    <string name="settings_rate_review">रेटिंग और समीक्षा दें</string>
+    <string name="settings_about_us">हमारे बारे में</string>
+    <string name="settings_dialog_cancel">रद्द करें</string>
+    <string name="settings_language_dialog_title">भाषा चुनें</string>
+
+    <!-- About Screen -->
+    <string name="about_title">हमारे बारे में</string>
+    <string name="about_view_contributors">योगदानकर्ताओं को देखें</string>
+    <string name="about_view_github">GitHub पर देखें</string>
+</resources>
