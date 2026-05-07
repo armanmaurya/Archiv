@@ -1,68 +1,148 @@
 package com.armanmaurya.archiv.camera
 
+import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.PointF
 import android.util.Log
 import androidx.camera.core.ImageProxy
-import org.opencv.core.Core
-import org.opencv.core.CvType
-import org.opencv.core.Mat
-import org.opencv.core.MatOfPoint
-import org.opencv.core.Point
-import org.opencv.core.Size
+import com.armanmaurya.archiv.ml.corners.DocQuadDetector
+import com.armanmaurya.archiv.ml.corners.OpenCVCornerDetector
+import com.armanmaurya.archiv.ml.docquad.DocQuadOrtRunner
+import org.opencv.android.Utils
+import org.opencv.core.*
 import org.opencv.imgproc.Imgproc
 
 class FrameProcessor {
+
+    private var docQuadDetector: DocQuadDetector? = null
+    private val openCVDetector = OpenCVCornerDetector()
+
+    // Temporal smoothing: keeps last N detected corner sets and averages them
+    private val cornerHistory = ArrayDeque<List<PointF>>(HISTORY_SIZE)
+
+    companion object {
+        private const val HISTORY_SIZE = 1
+        private const val SMOOTH_ALPHA = 0.05f  // minimal smoothing
+        private const val TAG = "FrameProcessor"
+    }
+
+    fun initialize(context: Context) {
+        if (docQuadDetector == null) {
+            try {
+                val runner = DocQuadOrtRunner.getInstance(context, DocQuadDetector.DEFAULT_MODEL_ASSET_PATH)
+                docQuadDetector = DocQuadDetector(runner)
+                Log.d(TAG, "DocQuadDetector initialized")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to initialize DocQuadDetector", e)
+            }
+        }
+    }
+
+    fun processFrame(imageProxy: ImageProxy, context: Context): Triple<List<PointF>?, Float?, Bitmap?>? {
+        // Lazy-initialize detector on first frame (not on compose creation)
+        if (docQuadDetector == null) {
+            try {
+                val runner = DocQuadOrtRunner.getInstance(context, DocQuadDetector.DEFAULT_MODEL_ASSET_PATH)
+                docQuadDetector = DocQuadDetector(runner)
+                Log.d(TAG, "DocQuadDetector initialized on first frame")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to initialize DocQuadDetector", e)
+                return null
+            }
+        }
+
+        val gray = imageProxyToMat(imageProxy) ?: return null
+        val w = gray.width()
+        val h = gray.height()
+        val aspect = w.toFloat() / h.toFloat()
+
+        // 1. Try DocQuadDetector (ML-based) - Primary
+        val detector = docQuadDetector
+        if (detector != null) {
+            val bitmap = Mat(h, w, CvType.CV_8UC1)
+            gray.copyTo(bitmap)
+            val rgbBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            Utils.matToBitmap(bitmap, rgbBitmap)
+            bitmap.release()
+
+            val result = detector.detect(rgbBitmap, context)
+            rgbBitmap.recycle()
+
+            if (result.success && result.cornersOriginalTLTRBRBL != null) {
+                val corners = result.cornersOriginalTLTRBRBL.map { PointF(it[0].toFloat(), it[1].toFloat()) }
+                val normalized = corners.map { PointF(it.x / w.toFloat(), it.y / h.toFloat()) }
+                val smoothed = addToHistoryAndSmooth(normalized)
+                gray.release()
+                return Triple(smoothed, aspect, null)
+            }
+        }
+
+        /*
+        // 2. OpenCV-based detection (Disabled)
+        val openCvResult = openCVDetector.detectMat(gray)
+        if (openCvResult.success && openCvResult.cornersOriginalTLTRBRBL != null) {
+            val corners = openCvResult.cornersOriginalTLTRBRBL.map { PointF(it[0].toFloat(), it[1].toFloat()) }
+            val normalized = corners.map { PointF(it.x / w.toFloat(), it.y / h.toFloat()) }
+            val smoothed = addToHistoryAndSmooth(normalized)
+            gray.release()
+            return Triple(smoothed, aspect, null)
+        }
+        */
+
+        gray.release()
+        Log.d(TAG, "No document detected")
+        if (cornerHistory.isNotEmpty()) {
+            cornerHistory.removeFirstOrNull()
+        }
+        return Triple(null, aspect, null)
+    }
+
+    // ── Corner history + exponential smoothing ──────────────────────────────
+
+    private fun addToHistoryAndSmooth(corners: List<PointF>): List<PointF> {
+        if (cornerHistory.size >= HISTORY_SIZE) {
+            cornerHistory.removeFirst()
+        }
+        cornerHistory.addLast(corners)
+
+        if (cornerHistory.size == 1) return corners
+
+        // Exponential moving average over history
+        val base = cornerHistory.first()
+        return base.mapIndexed { i, _ ->
+            var x = 0f
+            var y = 0f
+            var weight = 1f
+            var totalWeight = 0f
+            for (frame in cornerHistory) {
+                x += frame[i].x * weight
+                y += frame[i].y * weight
+                totalWeight += weight
+                weight *= (1f + SMOOTH_ALPHA)
+            }
+            PointF(x / totalWeight, y / totalWeight)
+        }
+    }
+
+    fun resetHistory() {
+        cornerHistory.clear()
+    }
+
+    // ── Helper ──────────────────────────────────────────────────────────────
+
+    // Kept for public use (e.g. overlay drawing)
     fun sortCornersClockwise(points: List<PointF>): List<PointF> {
         if (points.size != 4) return points
-
-        val cx = points.map { it.x }.sum() / 4f
-        val cy = points.map { it.y }.sum() / 4f
-
-        return points.sortedWith { a, b ->
-            val angleA = kotlin.math.atan2((a.y - cy).toDouble(), (a.x - cx).toDouble())
-            val angleB = kotlin.math.atan2((b.y - cy).toDouble(), (b.x - cx).toDouble())
-            angleA.compareTo(angleB)
-        }
+        val sorted = points.sortedBy { it.x + it.y }
+        val tl = sorted[0]
+        val br = sorted[3]
+        val remaining = listOf(sorted[1], sorted[2])
+        val tr = remaining.maxByOrNull { it.x - it.y } ?: return points
+        val bl = remaining.minByOrNull { it.x - it.y } ?: return points
+        return listOf(tl, tr, br, bl)
     }
 
-    fun processFrame(imageProxy: ImageProxy): Pair<List<PointF>, Float>? {
-        val srcMat = imageProxyToMat(imageProxy) ?: return null
-
-        val processedWidth = srcMat.width()
-        val processedHeight = srcMat.height()
-
-        val blurMat = Mat()
-        val tempMat = Mat()
-
-        Imgproc.medianBlur(srcMat, tempMat, 5)
-        Imgproc.bilateralFilter(tempMat, blurMat, 9, 75.0, 75.0)
-        tempMat.release()
-
-        val edgesMat = Mat()
-        Imgproc.Canny(blurMat, edgesMat, 50.0, 150.0)
-
-        val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(5.0, 5.0))
-        Imgproc.morphologyEx(edgesMat, edgesMat, Imgproc.MORPH_CLOSE, kernel)
-
-        val corners = detectCornersFromHough(edgesMat, processedWidth, processedHeight)
-
-        srcMat.release()
-        blurMat.release()
-        edgesMat.release()
-
-        return corners?.let {
-            Log.d("FrameProcessor", "Found document corners from Hough lines")
-            val aspect = processedWidth.toFloat() / processedHeight.toFloat()
-            val normalized =
-                    it.map { point ->
-                        PointF(
-                                point.x / processedWidth.toFloat(),
-                                point.y / processedHeight.toFloat()
-                        )
-                    }
-            Pair(normalized, aspect)
-        }
-    }
+    // ── Image conversion ─────────────────────────────────────────────────────
 
     private fun imageProxyToMat(imageProxy: ImageProxy): Mat? {
         val yBuffer = imageProxy.planes[0].buffer
@@ -90,11 +170,11 @@ class FrameProcessor {
             }
             mat.put(0, 0, validData)
         }
-
         return rotateMat(mat, imageProxy.imageInfo.rotationDegrees)
     }
 
     private fun rotateMat(src: Mat, rotation: Int): Mat {
+        if (rotation == 0) return src
         val rotated = Mat()
         when (rotation) {
             90 -> Core.rotate(src, rotated, Core.ROTATE_90_CLOCKWISE)
@@ -106,134 +186,10 @@ class FrameProcessor {
         return rotated
     }
 
-    private fun detectCornersFromHough(
-            edges: Mat,
-            width: Int,
-            height: Int
-    ): List<PointF>? {
-        val lines = Mat()
-        try {
-            Imgproc.HoughLinesP(
-                    edges,
-                    lines,
-                    1.0,
-                    Math.PI / 180.0,
-                    80,
-                    (width * 0.25).coerceAtLeast(60.0),
-                    16.0
-            )
-
-            if (lines.rows() == 0) return null
-
-            val horizontal = mutableListOf<DoubleArray>()
-            val vertical = mutableListOf<DoubleArray>()
-
-            for (i in 0 until lines.rows()) {
-                val line = lines.get(i, 0) ?: continue
-                if (line.size < 4) continue
-                val dx = line[2] - line[0]
-                val dy = line[3] - line[1]
-                val angle = kotlin.math.abs(Math.toDegrees(Math.atan2(dy, dx)))
-                if (angle < 25.0 || angle > 155.0) {
-                    horizontal.add(line)
-                } else if (angle > 65.0 && angle < 115.0) {
-                    vertical.add(line)
-                }
-            }
-
-            if (horizontal.size < 2 || vertical.size < 2) return null
-
-            val top = horizontal.minByOrNull { (it[1] + it[3]) * 0.5 } ?: return null
-            val bottom = horizontal.maxByOrNull { (it[1] + it[3]) * 0.5 } ?: return null
-            val left = vertical.minByOrNull { (it[0] + it[2]) * 0.5 } ?: return null
-            val right = vertical.maxByOrNull { (it[0] + it[2]) * 0.5 } ?: return null
-
-            val topLeft = intersect(top, left)
-            val topRight = intersect(top, right)
-            val bottomRight = intersect(bottom, right)
-            val bottomLeft = intersect(bottom, left)
-
-            if (topLeft == null || topRight == null || bottomRight == null || bottomLeft == null) {
-                return null
-            }
-
-            val quad = listOf(topLeft, topRight, bottomRight, bottomLeft)
-            if (!isValidQuadrilateral(quad, width, height)) return null
-            return quad
-        } finally {
-            lines.release()
-        }
-    }
-
-    private fun intersect(lineA: DoubleArray, lineB: DoubleArray): PointF? {
-        val p1 = Point(lineA[0], lineA[1])
-        val p2 = Point(lineA[2], lineA[3])
-        val p3 = Point(lineB[0], lineB[1])
-        val p4 = Point(lineB[2], lineB[3])
-
-        val a1 = p2.y - p1.y
-        val b1 = p1.x - p2.x
-        val c1 = a1 * p1.x + b1 * p1.y
-
-        val a2 = p4.y - p3.y
-        val b2 = p3.x - p4.x
-        val c2 = a2 * p3.x + b2 * p3.y
-
-        val det = a1 * b2 - a2 * b1
-        if (kotlin.math.abs(det) < 1e-6) return null
-
-        val x = (b2 * c1 - b1 * c2) / det
-        val y = (a1 * c2 - a2 * c1) / det
-        return PointF(x.toFloat(), y.toFloat())
-    }
-
-    private fun isValidQuadrilateral(points: List<PointF>, width: Int, height: Int): Boolean {
-        if (points.size != 4) return false
-        if (points.any { it.x.isNaN() || it.y.isNaN() }) return false
-
-        val contour =
-                MatOfPoint(
-                        Point(points[0].x.toDouble(), points[0].y.toDouble()),
-                        Point(points[1].x.toDouble(), points[1].y.toDouble()),
-                        Point(points[2].x.toDouble(), points[2].y.toDouble()),
-                        Point(points[3].x.toDouble(), points[3].y.toDouble())
-                )
-        if (!Imgproc.isContourConvex(contour)) return false
-
-        val area = kotlin.math.abs(Imgproc.contourArea(contour))
-        contour.release()
-        if (area < width * height * 0.05) return false
-
-        val centerX = points.map { it.x }.average().toFloat()
-        val centerY = points.map { it.y }.average().toFloat()
-        val ordered =
-                points.sortedWith { a, b ->
-                    val angleA =
-                            kotlin.math.atan2(
-                                    (a.y - centerY).toDouble(),
-                                    (a.x - centerX).toDouble()
-                            )
-                    val angleB =
-                            kotlin.math.atan2(
-                                    (b.y - centerY).toDouble(),
-                                    (b.x - centerX).toDouble()
-                            )
-                    angleA.compareTo(angleB)
-                }
-        val top = distance(ordered[0], ordered[1])
-        val right = distance(ordered[1], ordered[2])
-        val bottom = distance(ordered[2], ordered[3])
-        val left = distance(ordered[3], ordered[0])
-        val avgW = (top + bottom) / 2.0
-        val avgH = (left + right) / 2.0
-        if (avgW <= 1.0 || avgH <= 1.0) return false
-        val ratio = avgW / avgH
-        return ratio in 0.35..2.2
-    }
-
-    private fun distance(a: PointF, b: PointF): Double {
+    private fun dist(a: PointF, b: PointF): Double {
         val dx = (a.x - b.x).toDouble()
         val dy = (a.y - b.y).toDouble()
         return kotlin.math.sqrt(dx * dx + dy * dy)
     }
 }
+

@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -51,6 +52,7 @@ import com.armanmaurya.archiv.ui.document.components.DocumentItem
 fun DocumentListScreen(
     viewModel: DocumentViewModel,
     onOpenScanner: () -> Unit,
+    onOpenPdfTools: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
     val context = LocalContext.current
@@ -106,6 +108,12 @@ fun DocumentListScreen(
             CenterAlignedTopAppBar(
                 title = { Text(stringResource(R.string.document_list_title)) },
                 actions = {
+                    IconButton(onClick = onOpenPdfTools) {
+                        Icon(
+                            imageVector = Icons.Outlined.Build,
+                            contentDescription = "PDF Tools"
+                        )
+                    }
                     IconButton(onClick = onOpenSettings) {
                         Icon(
                             imageVector = Icons.Outlined.Settings,

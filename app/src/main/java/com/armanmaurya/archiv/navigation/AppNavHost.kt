@@ -25,6 +25,11 @@ import com.armanmaurya.archiv.ui.scanner.ScannerViewModel
 import com.armanmaurya.archiv.ui.scanner.EditorScreen
 import com.armanmaurya.archiv.ui.document.DocumentListScreen
 import com.armanmaurya.archiv.ui.document.DocumentViewModel
+import com.armanmaurya.archiv.ui.document.MergePdfsScreen
+import com.armanmaurya.archiv.ui.document.PdfToolsScreen
+import com.armanmaurya.archiv.ui.document.PdfToolsViewModel
+import com.armanmaurya.archiv.ui.document.ReorderPdfScreen
+import com.armanmaurya.archiv.ui.document.SplitPdfScreen
 import com.armanmaurya.archiv.ui.settings.AboutScreen
 import com.armanmaurya.archiv.ui.settings.SettingsScreen
 import com.armanmaurya.archiv.ui.settings.SettingsViewModel
@@ -69,12 +74,110 @@ fun AppNavHost(
                             launchSingleTop = true
                         }
                     },
+                    onOpenPdfTools = {
+                        navController.navigate(Screen.PDF_TOOLS_FLOW) {
+                            launchSingleTop = true
+                        }
+                    },
                     onOpenSettings = {
                         navController.navigate(Screen.SETTINGS) {
                             launchSingleTop = true
                         }
                     }
                 )
+            }
+
+            navigation(
+                startDestination = Screen.PDF_TOOLS,
+                route = Screen.PDF_TOOLS_FLOW
+            ) {
+                composable(
+                    route = Screen.PDF_TOOLS,
+                    enterTransition = { slideInHorizontally(initialOffsetX = { it }) },
+                    exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) },
+                    popEnterTransition = { slideInHorizontally(initialOffsetX = { -it }) },
+                    popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) }
+                ) { backStackEntry ->
+                    val parentEntry = remember(backStackEntry) {
+                        navController.getBackStackEntry(Screen.PDF_TOOLS_FLOW)
+                    }
+                    val viewModel: PdfToolsViewModel = viewModel(
+                        parentEntry,
+                        factory = PdfToolsViewModel.factory(context)
+                    )
+                    PdfToolsScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenMerge = { selectedUris ->
+                            viewModel.setMergeUris(selectedUris)
+                            navController.navigate(Screen.PDF_TOOLS_MERGE)
+                        },
+                        onOpenSplit = { navController.navigate(Screen.PDF_TOOLS_SPLIT) },
+                        onOpenReorder = { selectedUri ->
+                            viewModel.selectReorderUri(selectedUri)
+                            navController.navigate(Screen.PDF_TOOLS_REORDER)
+                        }
+                    )
+                }
+
+                composable(
+                    route = Screen.PDF_TOOLS_MERGE,
+                    enterTransition = { slideInHorizontally(initialOffsetX = { it }) },
+                    exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) },
+                    popEnterTransition = { slideInHorizontally(initialOffsetX = { -it }) },
+                    popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) }
+                ) { backStackEntry ->
+                    val parentEntry = remember(backStackEntry) {
+                        navController.getBackStackEntry(Screen.PDF_TOOLS_FLOW)
+                    }
+                    val viewModel: PdfToolsViewModel = viewModel(
+                        parentEntry,
+                        factory = PdfToolsViewModel.factory(context)
+                    )
+                    MergePdfsScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+
+                composable(
+                    route = Screen.PDF_TOOLS_SPLIT,
+                    enterTransition = { slideInHorizontally(initialOffsetX = { it }) },
+                    exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) },
+                    popEnterTransition = { slideInHorizontally(initialOffsetX = { -it }) },
+                    popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) }
+                ) { backStackEntry ->
+                    val parentEntry = remember(backStackEntry) {
+                        navController.getBackStackEntry(Screen.PDF_TOOLS_FLOW)
+                    }
+                    val viewModel: PdfToolsViewModel = viewModel(
+                        parentEntry,
+                        factory = PdfToolsViewModel.factory(context)
+                    )
+                    SplitPdfScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+
+                composable(
+                    route = Screen.PDF_TOOLS_REORDER,
+                    enterTransition = { slideInHorizontally(initialOffsetX = { it }) },
+                    exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) },
+                    popEnterTransition = { slideInHorizontally(initialOffsetX = { -it }) },
+                    popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) }
+                ) { backStackEntry ->
+                    val parentEntry = remember(backStackEntry) {
+                        navController.getBackStackEntry(Screen.PDF_TOOLS_FLOW)
+                    }
+                    val viewModel: PdfToolsViewModel = viewModel(
+                        parentEntry,
+                        factory = PdfToolsViewModel.factory(context)
+                    )
+                    ReorderPdfScreen(
+                        viewModel = viewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
             }
 
             navigation(

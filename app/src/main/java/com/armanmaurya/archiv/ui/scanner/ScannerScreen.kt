@@ -30,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +45,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.armanmaurya.archiv.R
+import com.armanmaurya.archiv.bitmap.decodeSampledBitmap
+import com.armanmaurya.archiv.ml.corners.DocQuadDetector
+import com.armanmaurya.archiv.ml.corners.FallbackDetector
+import com.armanmaurya.archiv.ml.corners.OpenCVCornerDetector
+import com.armanmaurya.archiv.ml.docquad.DocQuadOrtRunner
 import com.armanmaurya.archiv.ui.scanner.components.CameraPreview
 import com.armanmaurya.archiv.ui.scanner.components.GalleryButton
 import com.armanmaurya.archiv.ui.scanner.components.ThumbnailStrip
@@ -76,8 +82,20 @@ fun ScannerScreen(
     var isCameraBusy by remember { mutableStateOf(false) }
     var isAutoEdgeDetectionEnabled by remember { mutableStateOf(true) }
     val isScreenBusy = viewModel.isSavingPdf || isImportBusy || isCameraBusy
+    val isAutoCaptureEnabled = isAutoEdgeDetectionEnabled && !isScreenBusy
 
     val visibleErrorMessage = scannerErrorMessage ?: viewModel.saveErrorMessage
+
+    // Preload DocQuadDetector model on screen entry to avoid freeze on first frame
+    LaunchedEffect(Unit) {
+        coroutineScope.launch(Dispatchers.Default) {
+            try {
+                DocQuadOrtRunner.getInstanceAsync(context, DocQuadDetector.DEFAULT_MODEL_ASSET_PATH).get()
+            } catch (e: Exception) {
+                // Model preload failed, but processFrame has fallback logic
+            }
+        }
+    }
 
     fun handleExitAttempt() {
         if (isScreenBusy) return
@@ -116,6 +134,8 @@ fun ScannerScreen(
                 onCameraBusyChange = { isBusy -> isCameraBusy = isBusy },
                 onCameraError = { message -> scannerErrorMessage = message },
                 isAutoEdgeDetectionEnabled = isAutoEdgeDetectionEnabled,
+                isAutoCaptureEnabled = isAutoCaptureEnabled,
+                onAutoCapture = { captureRequestKey++ },
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -133,7 +153,42 @@ fun ScannerScreen(
                         val copiedUris = withContext(Dispatchers.IO) {
                             uris.mapNotNull { uri -> copyUriToCache(context, uri) }
                         }
-                        copiedUris.forEach { uri -> viewModel.addPage(uri) }
+                        
+                        // Perform edge detection on each imported image if enabled
+                        if (isAutoEdgeDetectionEnabled && copiedUris.isNotEmpty()) {
+                            val detector = withContext(Dispatchers.Default) {
+                                val runner = DocQuadOrtRunner.getInstance(context, DocQuadDetector.DEFAULT_MODEL_ASSET_PATH)
+                                DocQuadDetector(runner)
+                            }
+                            /*
+                            val detector = OpenCVCornerDetector()
+                            */
+
+                            copiedUris.forEach { uri ->
+                                var detectedBounds: List<android.graphics.PointF>? = null
+                                withContext(Dispatchers.Default) {
+                                    decodeSampledBitmap(context, uri)?.let { bitmap ->
+                                        try {
+                                            val result = detector.detect(bitmap, context)
+                                            if (result.success && result.cornersOriginalTLTRBRBL != null) {
+                                                detectedBounds = result.cornersOriginalTLTRBRBL.map { 
+                                                    android.graphics.PointF(
+                                                        (it[0] / bitmap.width).toFloat(),
+                                                        (it[1] / bitmap.height).toFloat()
+                                                    )
+                                                }
+                                            }
+                                        } finally {
+                                            bitmap.recycle()
+                                        }
+                                    }
+                                }
+                                viewModel.addPage(uri, detectedBounds)
+                            }
+                        } else {
+                            copiedUris.forEach { uri -> viewModel.addPage(uri) }
+                        }
+                        
                         if (copiedUris.isEmpty()) {
                             scannerErrorMessage = "Unable to import selected images."
                         }
