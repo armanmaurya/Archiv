@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import androidx.annotation.RequiresApi
 import androidx.core.net.toUri
 import java.io.File
 import java.io.FileOutputStream
@@ -20,11 +21,15 @@ class PdfStorage(context: Context) {
     private val appContext = context.applicationContext
 
     fun savePdfToAppStorage(pdfBytes: ByteArray): File {
+        return savePdfToAppStorage(pdfBytes, buildDefaultPdfName())
+    }
+
+    fun savePdfToAppStorage(pdfBytes: ByteArray, desiredName: String): File {
         if (pdfBytes.isEmpty()) {
             throw IOException("Generated PDF is empty.")
         }
         val outputDir = requireAppDocumentsDir()
-        val outputFile = buildUniqueFile(outputDir, buildDefaultPdfName())
+        val outputFile = buildUniqueFile(outputDir, ensurePdfExtension(desiredName))
 
         FileOutputStream(outputFile).use { outputStream ->
             outputStream.write(pdfBytes)
@@ -91,6 +96,7 @@ class PdfStorage(context: Context) {
         return outputDir
     }
 
+    @RequiresApi(Build.VERSION_CODES.Q)
     private fun exportToMediaStore(sourceFile: File): Uri {
         val resolver = appContext.contentResolver
         val values = ContentValues().apply {
@@ -173,6 +179,18 @@ class PdfStorage(context: Context) {
         val timestamp = SimpleDateFormat("dd MMMM yyyy hh-mm a", Locale.ENGLISH)
             .format(Date())
         return "Archiv $timestamp.pdf"
+    }
+
+    private fun ensurePdfExtension(name: String): String {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) {
+            return buildDefaultPdfName()
+        }
+        return if (trimmed.endsWith(".pdf", ignoreCase = true)) {
+            trimmed
+        } else {
+            "$trimmed.pdf"
+        }
     }
 }
 

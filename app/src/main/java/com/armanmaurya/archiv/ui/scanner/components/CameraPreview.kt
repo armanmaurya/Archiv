@@ -18,9 +18,12 @@ import androidx.camera.core.UseCase
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -71,24 +74,26 @@ import com.armanmaurya.archiv.bitmap.orderCorners
 import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 private fun CameraView(
-        onCameraPreviewReady: (PreviewView) -> Unit,
-        modifier: Modifier = Modifier
+    onCameraPreviewReady: (PreviewView) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     AndroidView(
-            modifier = modifier,
-            factory = { PreviewView(context).also(onCameraPreviewReady) }
+        modifier = modifier,
+        factory = { PreviewView(context).also(onCameraPreviewReady) }
     )
 }
 
 @Composable
 private fun DocumentOverlay(
-        corners: List<PointF>?,
-        imageAspectRatio: Float,
-        modifier: Modifier = Modifier
+    corners: List<PointF>?,
+    imageAspectRatio: Float,
+    modifier: Modifier = Modifier
 ) {
     val detectedCorners = corners?.takeIf { it.size == 4 } ?: return
     val animatedCorners = detectedCorners.mapIndexed { index, point ->
@@ -111,6 +116,7 @@ private fun DocumentOverlay(
             offsetY = 0f
         } else {
             scaledWidth = size.width
+
             scaledHeight = size.width / imageAspectRatio
             offsetX = 0f
             offsetY = (size.height - scaledHeight) / 2f
@@ -135,12 +141,12 @@ private fun DocumentOverlay(
 private fun animateCornerPoint(point: PointF, label: String): PointF {
     val animatedX by animateFloatAsState(
         targetValue = point.x,
-        animationSpec = tween(durationMillis = 120),
+        animationSpec = tween(durationMillis = 120, easing = EaseInOut),
         label = "$label-x"
     )
     val animatedY by animateFloatAsState(
         targetValue = point.y,
-        animationSpec = tween(durationMillis = 120),
+        animationSpec = tween(durationMillis = 120, easing = EaseInOut),
         label = "$label-y"
     )
     return PointF(animatedX, animatedY)
@@ -148,21 +154,21 @@ private fun animateCornerPoint(point: PointF, label: String): PointF {
 
 @Composable
 private fun CameraError(
-        message: String?,
-        onDismiss: () -> Unit,
-        modifier: Modifier = Modifier
+    message: String?,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     message?.let {
         Surface(
-                modifier = modifier.padding(top = 48.dp, start = 16.dp, end = 16.dp),
-                color = MaterialTheme.colorScheme.errorContainer,
-                shape = RoundedCornerShape(8.dp)
+            modifier = modifier.padding(top = 48.dp, start = 16.dp, end = 16.dp),
+            color = MaterialTheme.colorScheme.errorContainer,
+            shape = RoundedCornerShape(8.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                        text = it,
-                        modifier = Modifier.padding(16.dp),
-                        color = MaterialTheme.colorScheme.onErrorContainer
+                    text = it,
+                    modifier = Modifier.padding(16.dp),
+                    color = MaterialTheme.colorScheme.onErrorContainer
                 )
                 IconButton(onClick = onDismiss) {
                     Icon(Icons.Default.Close, contentDescription = "Dismiss error")
@@ -174,25 +180,25 @@ private fun CameraError(
 
 @Composable
 private fun SearchingIndicator(
-        isVisible: Boolean,
-        modifier: Modifier = Modifier
+    isVisible: Boolean,
+    modifier: Modifier = Modifier
 ) {
     if (isVisible) {
         Surface(
-                modifier = modifier.padding(bottom = 24.dp),
-                color = Color.Black.copy(alpha = 0.6f),
-                contentColor = Color.White,
-                shape = RoundedCornerShape(24.dp)
+            modifier = modifier.padding(bottom = 24.dp),
+            color = Color.Black.copy(alpha = 0.6f),
+            contentColor = Color.White,
+            shape = RoundedCornerShape(24.dp)
         ) {
             Row(
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
+                    imageVector = Icons.Default.Search,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
                 )
                 Text(text = "Searching for documents", fontWeight = FontWeight.Medium)
             }
@@ -202,14 +208,16 @@ private fun SearchingIndicator(
 
 @Composable
 fun CameraPreview(
-        captureRequestKey: Long,
-        errorMessage: String?,
-        onDismissError: () -> Unit,
-        onCapture: (Uri, List<PointF>) -> Unit,
-        onCameraBusyChange: (Boolean) -> Unit,
-        onCameraError: (String?) -> Unit,
-        isAutoEdgeDetectionEnabled: Boolean,
-        modifier: Modifier = Modifier
+    captureRequestKey: Long,
+    errorMessage: String?,
+    onDismissError: () -> Unit,
+    onCapture: (Uri, List<PointF>) -> Unit,
+    onCameraBusyChange: (Boolean) -> Unit,
+    onCameraError: (String?) -> Unit,
+    isAutoEdgeDetectionEnabled: Boolean,
+    isAutoCaptureEnabled: Boolean = false,
+    onAutoCapture: () -> Unit = {},
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -218,21 +226,23 @@ fun CameraPreview(
     var hasCameraPermission by remember { mutableStateOf(isCameraPermissionGranted(context)) }
 
     val requestCameraPermissionLauncher =
-            rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-                hasCameraPermission = granted
-                if (!granted) {
-                    onCameraBusyChange(false)
-                    onCameraError("Camera permission is required to scan documents.")
-                } else {
-                    onCameraError(null)
-                }
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            hasCameraPermission = granted
+            if (!granted) {
+                onCameraBusyChange(false)
+                onCameraError("Camera permission is required to scan documents.")
+            } else {
+                onCameraError(null)
             }
+        }
 
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var detectedCorners by remember { mutableStateOf<List<PointF>?>(null) }
     var frozenPreviewFrame by remember { mutableStateOf<Bitmap?>(null) }
+
     var imageAspectRatio by remember { mutableFloatStateOf(0.75f) }
+    var autoCaptureProgress by remember { mutableFloatStateOf(0f) }
     val currentDetectedCorners by rememberUpdatedState(detectedCorners)
     val clearFrozenPreviewFrame = {
         frozenPreviewFrame?.let { bitmap ->
@@ -241,6 +251,12 @@ fun CameraPreview(
             }
         }
         frozenPreviewFrame = null
+    }
+
+    LaunchedEffect(autoCaptureProgress) {
+        if (autoCaptureProgress >= 1f && isAutoCaptureEnabled) {
+            onAutoCapture()
+        }
     }
 
     DisposableEffect(Unit) {
@@ -274,22 +290,23 @@ fun CameraPreview(
         }
 
         bindCameraPreview(
-                context = context,
-                lifecycleOwner = lifecycleOwner,
-                frameProcessor = frameProcessor,
-                analyzerExecutor = analyzerExecutor,
-                previewView = targetPreviewView,
-                autoEdgeDetectionEnabled = isAutoEdgeDetectionEnabled,
-                onImageCaptureReady = { captureUseCase -> imageCapture = captureUseCase },
-                onCornersUpdated = { corners, aspect ->
-                    if (corners != null && aspect != null) {
-                        detectedCorners = corners
-                        imageAspectRatio = aspect
-                    } else {
-                        detectedCorners = null
-                    }
-                },
-                onError = { message -> onCameraError(message) }
+            context = context,
+            lifecycleOwner = lifecycleOwner,
+            frameProcessor = frameProcessor,
+            analyzerExecutor = analyzerExecutor,
+            previewView = targetPreviewView,
+            autoEdgeDetectionEnabled = isAutoEdgeDetectionEnabled,
+            onImageCaptureReady = { captureUseCase -> imageCapture = captureUseCase },
+            onStabilityProgress = { progress -> autoCaptureProgress = progress },
+            onCornersUpdated = { corners, aspect, bmp ->
+                if (corners != null && aspect != null) {
+                    detectedCorners = corners
+                    imageAspectRatio = aspect
+                } else {
+                    detectedCorners = null
+                }
+            },
+            onError = { message -> onCameraError(message) }
         )
     }
 
@@ -323,40 +340,40 @@ fun CameraPreview(
         }
 
         captureUseCase.takePicture(
-                outputOptions,
-                ContextCompat.getMainExecutor(context),
-                object : ImageCapture.OnImageSavedCallback {
-                    override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                        clearFrozenPreviewFrame()
-                        val savedUri = outputFile.toUri()
-                        val initialBounds = if (isAutoEdgeDetectionEnabled) {
-                            sanitizeInitialBounds(
-                                    currentDetectedCorners
-                                            ?.takeIf { it.size == 4 }
-                                            ?.let { orderCorners(it) }
-                            )
-                        } else {
-                            fullImageBounds()
-                        }
-                        onCapture(savedUri, initialBounds)
-                        onCameraBusyChange(false)
+            outputOptions,
+            ContextCompat.getMainExecutor(context),
+            object : ImageCapture.OnImageSavedCallback {
+                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                    clearFrozenPreviewFrame()
+                    val savedUri = outputFile.toUri()
+                    val initialBounds = if (isAutoEdgeDetectionEnabled) {
+                        sanitizeInitialBounds(
+                            currentDetectedCorners
+                                ?.takeIf { it.size == 4 }
+                                ?.let { orderCorners(it) }
+                        )
+                    } else {
+                        fullImageBounds()
                     }
-
-                    override fun onError(exception: ImageCaptureException) {
-                        clearFrozenPreviewFrame()
-                        onCameraBusyChange(false)
-                        onCameraError(exception.message ?: "Failed to capture page.")
-                        Log.e("CapturePage", "ImageCapture error: ${exception.message}", exception)
-                    }
+                    onCapture(savedUri, initialBounds)
+                    onCameraBusyChange(false)
                 }
+
+                override fun onError(exception: ImageCaptureException) {
+                    clearFrozenPreviewFrame()
+                    onCameraBusyChange(false)
+                    onCameraError(exception.message ?: "Failed to capture page.")
+                    Log.e("CapturePage", "ImageCapture error: ${exception.message}", exception)
+                }
+            }
         )
     }
 
     if (!hasCameraPermission) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(stringResource(R.string.camera_permission_required), color = MaterialTheme.colorScheme.error)
                 Button(onClick = { requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA) }) {
@@ -369,21 +386,21 @@ fun CameraPreview(
 
     Box(modifier = modifier.fillMaxWidth()) {
         CameraView(
-                onCameraPreviewReady = { preview -> previewView = preview },
-                modifier =
-                        Modifier.fillMaxSize().clip(
-                                RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)
-                        )
+            onCameraPreviewReady = { preview -> previewView = preview },
+            modifier =
+                Modifier.fillMaxSize().clip(
+                    RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)
+                )
         )
 
         frozenPreviewFrame?.let { capturedFrame ->
             Image(
-                    bitmap = capturedFrame.asImageBitmap(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().clip(
-                            RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)
-                    )
+                bitmap = capturedFrame.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().clip(
+                    RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)
+                )
             )
         }
 
@@ -392,132 +409,205 @@ fun CameraPreview(
         }
 
         CameraError(
-                message = errorMessage,
-                onDismiss = onDismissError,
-                modifier = Modifier.align(Alignment.TopCenter)
+            message = errorMessage,
+            onDismiss = onDismissError,
+            modifier = Modifier.align(Alignment.TopCenter)
         )
 
         SearchingIndicator(
-                isVisible = isAutoEdgeDetectionEnabled && detectedCorners == null && frozenPreviewFrame == null,
-                modifier = Modifier.align(Alignment.BottomCenter)
+            isVisible = isAutoEdgeDetectionEnabled && detectedCorners == null && frozenPreviewFrame == null,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
+
+        if (isAutoCaptureEnabled && autoCaptureProgress > 0f) {
+            AutoCaptureProgressArc(
+                progress = autoCaptureProgress,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 80.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun AutoCaptureProgressArc(
+    progress: Float,
+    modifier: Modifier = Modifier
+) {
+    val color = MaterialTheme.colorScheme.primary
+    Canvas(modifier = modifier.size(56.dp)) {
+        drawArc(
+            color = color.copy(alpha = 0.25f),
+            startAngle = -90f,
+            sweepAngle = 360f,
+            useCenter = false,
+            style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round)
+        )
+        drawArc(
+            color = color,
+            startAngle = -90f,
+            sweepAngle = 360f * progress,
+            useCenter = false,
+            style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round)
         )
     }
 }
 
 private fun bindCameraPreview(
-        context: Context,
-        lifecycleOwner: LifecycleOwner,
-        frameProcessor: FrameProcessor,
-        analyzerExecutor: ExecutorService,
-        previewView: PreviewView,
-        autoEdgeDetectionEnabled: Boolean,
-        onImageCaptureReady: (ImageCapture) -> Unit,
-        onCornersUpdated: (List<PointF>?, Float?) -> Unit,
-        onError: (String) -> Unit
+    context: Context,
+    lifecycleOwner: LifecycleOwner,
+    frameProcessor: FrameProcessor,
+    analyzerExecutor: ExecutorService,
+    previewView: PreviewView,
+    autoEdgeDetectionEnabled: Boolean,
+    onImageCaptureReady: (ImageCapture) -> Unit,
+    onStabilityProgress: (Float) -> Unit,
+    onCornersUpdated: (List<PointF>?, Float?, Bitmap?) -> Unit,
+    onError: (String) -> Unit
 ) {
     val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
     cameraProviderFuture.addListener(
-            {
-                val cameraProvider = cameraProviderFuture.get()
-                val preview =
-                        Preview.Builder()
-                                .setTargetAspectRatio(androidx.camera.core.AspectRatio.RATIO_4_3)
-                                .build()
-                                .also { it.setSurfaceProvider(previewView.surfaceProvider) }
+        {
+            val cameraProvider = cameraProviderFuture.get()
+            val preview =
+                Preview.Builder()
+                    .setTargetAspectRatio(androidx.camera.core.AspectRatio.RATIO_4_3)
+                    .build()
+                    .also { it.setSurfaceProvider(previewView.surfaceProvider) }
 
-                val imageCapture =
-                        ImageCapture.Builder()
-                                .setTargetAspectRatio(androidx.camera.core.AspectRatio.RATIO_4_3)
-                                .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                                .build()
-                onImageCaptureReady(imageCapture)
+            val imageCapture =
+                ImageCapture.Builder()
+                    .setTargetAspectRatio(androidx.camera.core.AspectRatio.RATIO_4_3)
+                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                    .build()
+            onImageCaptureReady(imageCapture)
 
-                val useCases = mutableListOf<UseCase>(preview, imageCapture)
-                if (autoEdgeDetectionEnabled) {
-                    val imageAnalysis =
-                            ImageAnalysis.Builder()
-                                    .setTargetAspectRatio(androidx.camera.core.AspectRatio.RATIO_4_3)
-                                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                                    .build()
+            val useCases = mutableListOf<UseCase>(preview, imageCapture)
+            if (autoEdgeDetectionEnabled) {
+                val imageAnalysis =
+                    ImageAnalysis.Builder()
+                        .setTargetAspectRatio(androidx.camera.core.AspectRatio.RATIO_4_3)
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .build()
 
-                    var lastDetectedCorners: List<PointF>? = null
-                    var lastAspectRatio: Float? = null
-                    var strikeOutCount = 0
+                var lastDetectedCorners: List<PointF>? = null
+                var lastAspectRatio: Float? = null
+                var strikeOutCount = 0
+                var frameCount = 0L
+                val FRAME_SKIP = 3
+                var prevStableCorners: List<PointF>? = null
+                var stableFrameCount = 0
+                val STABLE_FRAMES_REQUIRED = 15
+                val STABILITY_THRESHOLD = 0.015f
 
-                    imageAnalysis.setAnalyzer(analyzerExecutor) { imageProxy ->
-                        try {
-                            val result = frameProcessor.processFrame(imageProxy)
-                            val smoothedResult =
-                                    if (result != null) {
-                                        strikeOutCount = 0
-                                        val (rawCorners, aspect) = result
-                                        val sorted = frameProcessor.sortCornersClockwise(rawCorners)
-                                        val currentLast = lastDetectedCorners
-                                        val smoothed =
-                                                if (currentLast != null && currentLast.size == 4) {
-                                                    sorted.mapIndexed { index, newPt ->
-                                                        val oldPt = currentLast[index]
-                                                        PointF(
-                                                                oldPt.x * 0.7f + newPt.x * 0.3f,
-                                                                oldPt.y * 0.7f + newPt.y * 0.3f
-                                                        )
-                                                    }
-                                                } else {
-                                                    sorted
-                                                }
+                imageAnalysis.setAnalyzer(analyzerExecutor) { imageProxy ->
+                    try {
+                        frameCount++
+                        if (frameCount % FRAME_SKIP != 0L) {
+                            imageProxy.close()
+                            return@setAnalyzer
+                        }
 
-                                        lastDetectedCorners = smoothed
-                                        lastAspectRatio = aspect
-                                        Pair(smoothed, aspect)
-                                    } else {
-                                        strikeOutCount++
-                                        if (strikeOutCount > 5) {
-                                            lastDetectedCorners = null
-                                            null
-                                        } else {
-                                            val corners = lastDetectedCorners
-                                            val aspect = lastAspectRatio
-                                            if (corners != null && aspect != null) {
-                                                Pair(corners, aspect)
-                                            } else {
-                                                null
-                                            }
+                        val result = frameProcessor.processFrame(imageProxy, context)
+                        val smoothedResult =
+                            if (result != null && result.first != null && result.second != null) {
+                                strikeOutCount = 0
+                                val rawCorners = result.first!!
+                                val aspect = result.second!!
+                                val sorted = frameProcessor.sortCornersClockwise(rawCorners)
+                                val currentLast = lastDetectedCorners
+                                val smoothed =
+                                    if (currentLast != null && currentLast.size == 4) {
+                                        sorted.mapIndexed { index, newPt ->
+                                            val oldPt = currentLast[index]
+                                            PointF(
+                                                oldPt.x * 0.2f + newPt.x * 0.8f,
+                                                oldPt.y * 0.2f + newPt.y * 0.8f
+                                            )
                                         }
+                                    } else {
+                                        sorted
                                     }
 
-                            ContextCompat.getMainExecutor(context).execute {
-                                if (smoothedResult != null) {
-                                    onCornersUpdated(smoothedResult.first, smoothedResult.second)
+                            lastDetectedCorners = smoothed
+                                lastAspectRatio = aspect
+                                Pair(smoothed, aspect)
+                            } else {
+                                strikeOutCount++
+                                if (strikeOutCount > 5) {
+                                    lastDetectedCorners = null
+                                    null
                                 } else {
-                                    onCornersUpdated(null, null)
+                                    val corners = lastDetectedCorners
+                                    val aspect = lastAspectRatio
+                                    if (corners != null && aspect != null) {
+                                        Pair(corners, aspect)
+                                    } else {
+                                        null
+                                    }
                                 }
                             }
-                        } catch (e: Exception) {
-                            Log.e("detectDocumentCorners", "Error locating document corners", e)
-                        } finally {
-                            imageProxy.close()
+
+                        val currentCorners = smoothedResult?.first
+                        if (currentCorners != null && currentCorners.size == 4) {
+                            val prev = prevStableCorners
+                            val maxDisplacement = if (prev != null && prev.size == 4) {
+                                currentCorners.zip(prev).maxOf { (new, old) ->
+                                    kotlin.math.hypot(
+                                        (new.x - old.x).toDouble(),
+                                        (new.y - old.y).toDouble()
+                                    ).toFloat()
+                                }
+                            } else Float.MAX_VALUE
+                            if (maxDisplacement < STABILITY_THRESHOLD) {
+                                stableFrameCount = minOf(stableFrameCount + 1, STABLE_FRAMES_REQUIRED)
+                            } else {
+                                stableFrameCount = 0
+                            }
+                            prevStableCorners = currentCorners
+                        } else {
+                            stableFrameCount = 0
+                            prevStableCorners = null
                         }
+                        val stabilityProgress = (stableFrameCount.toFloat() / STABLE_FRAMES_REQUIRED).coerceIn(0f, 1f)
+                        if (stableFrameCount >= STABLE_FRAMES_REQUIRED) {
+                            stableFrameCount = 0
+                        }
+
+                        val edgeBmp = result?.third
+                        ContextCompat.getMainExecutor(context).execute {
+                            onStabilityProgress(stabilityProgress)
+                            if (smoothedResult != null) {
+                                onCornersUpdated(smoothedResult.first, smoothedResult.second, edgeBmp)
+                            } else {
+                                onCornersUpdated(null, null, edgeBmp)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("detectDocumentCorners", "Error locating document corners", e)
+                    } finally {
+                        imageProxy.close()
                     }
-
-                    useCases += imageAnalysis
-                } else {
-                    onCornersUpdated(null, null)
                 }
 
-                try {
-                    cameraProvider.unbindAll()
-                    cameraProvider.bindToLifecycle(
-                            lifecycleOwner,
-                            CameraSelector.DEFAULT_BACK_CAMERA,
-                            *useCases.toTypedArray()
-                    )
-                } catch (error: IllegalStateException) {
-                    onError("Unable to bind camera: ${error.message ?: "unknown error"}")
-                } catch (error: IllegalArgumentException) {
-                    onError("Unable to bind camera: ${error.message ?: "unknown error"}")
-                }
-            },
-            ContextCompat.getMainExecutor(context)
+                useCases += imageAnalysis
+            } else {
+                onCornersUpdated(null, null, null)
+            }
+
+            try {
+                cameraProvider.unbindAll()
+                cameraProvider.bindToLifecycle(
+                    lifecycleOwner,
+                    CameraSelector.DEFAULT_BACK_CAMERA,
+                    *useCases.toTypedArray()
+                )
+            } catch (error: IllegalStateException) {
+                onError("Unable to bind camera: ${error.message ?: "unknown error"}")
+            } catch (error: IllegalArgumentException) {
+                onError("Unable to bind camera: ${error.message ?: "unknown error"}")
+            }
+        },
+        ContextCompat.getMainExecutor(context)
     )
 }
 
@@ -541,7 +631,7 @@ private fun polygonArea(points: List<PointF>): Float {
 
 private fun isCameraPermissionGranted(context: Context): Boolean {
     return ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.CAMERA
+        context,
+        Manifest.permission.CAMERA
     ) == PackageManager.PERMISSION_GRANTED
 }
