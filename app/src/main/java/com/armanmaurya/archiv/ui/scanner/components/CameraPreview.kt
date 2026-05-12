@@ -9,6 +9,7 @@ import android.net.Uri
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
@@ -18,10 +19,11 @@ import androidx.camera.core.UseCase
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.layout.Arrangement
@@ -35,6 +37,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FlashOff
+import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -141,12 +145,12 @@ private fun DocumentOverlay(
 private fun animateCornerPoint(point: PointF, label: String): PointF {
     val animatedX by animateFloatAsState(
         targetValue = point.x,
-        animationSpec = tween(durationMillis = 120, easing = EaseInOut),
+        animationSpec = tween(durationMillis = 220, easing = androidx.compose.animation.core.LinearOutSlowInEasing),
         label = "$label-x"
     )
     val animatedY by animateFloatAsState(
         targetValue = point.y,
-        animationSpec = tween(durationMillis = 120, easing = EaseInOut),
+        animationSpec = tween(durationMillis = 220, easing = androidx.compose.animation.core.LinearOutSlowInEasing),
         label = "$label-y"
     )
     return PointF(animatedX, animatedY)
@@ -238,6 +242,8 @@ fun CameraPreview(
 
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
+    var camera by remember { mutableStateOf<Camera?>(null) }
+    var isTorchOn by remember { mutableStateOf(false) }
     var detectedCorners by remember { mutableStateOf<List<PointF>?>(null) }
     var frozenPreviewFrame by remember { mutableStateOf<Bitmap?>(null) }
 
@@ -253,17 +259,19 @@ fun CameraPreview(
         frozenPreviewFrame = null
     }
 
-    LaunchedEffect(autoCaptureProgress) {
-        if (autoCaptureProgress >= 1f && isAutoCaptureEnabled) {
-            onAutoCapture()
-        }
-    }
+    // AUTO-CAPTURE DISABLED
+    // LaunchedEffect(autoCaptureProgress) {
+    //     if (autoCaptureProgress >= 1f && isAutoCaptureEnabled) {
+    //         onAutoCapture()
+    //     }
+    // }
 
     DisposableEffect(Unit) {
         onDispose {
             clearFrozenPreviewFrame()
             analyzerExecutor.shutdown()
             onCameraBusyChange(false)
+            camera?.cameraControl?.enableTorch(false)
         }
     }
 
@@ -283,6 +291,8 @@ fun CameraPreview(
         val targetPreviewView = previewView
         if (!hasCameraPermission || targetPreviewView == null) {
             imageCapture = null
+            camera = null
+            isTorchOn = false
             detectedCorners = null
             clearFrozenPreviewFrame()
             onCameraBusyChange(false)
@@ -297,7 +307,8 @@ fun CameraPreview(
             previewView = targetPreviewView,
             autoEdgeDetectionEnabled = isAutoEdgeDetectionEnabled,
             onImageCaptureReady = { captureUseCase -> imageCapture = captureUseCase },
-            onStabilityProgress = { progress -> autoCaptureProgress = progress },
+            onCameraReady = { boundCamera -> camera = boundCamera },
+            onStabilityProgress = { _ -> /* AUTO-CAPTURE DISABLED */ },
             onCornersUpdated = { corners, aspect, bmp ->
                 if (corners != null && aspect != null) {
                     detectedCorners = corners
@@ -414,17 +425,52 @@ fun CameraPreview(
             modifier = Modifier.align(Alignment.TopCenter)
         )
 
+        // Torch toggle button — top-end corner
+        camera?.let { boundCamera ->
+            val torchIcon = if (isTorchOn) Icons.Default.FlashOn else Icons.Default.FlashOff
+            val torchBg = if (isTorchOn)
+                androidx.compose.ui.graphics.Color(0xFFFFB300) // amber
+            else
+                androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f)
+            val torchTint = if (isTorchOn)
+                androidx.compose.ui.graphics.Color.Black
+            else
+                androidx.compose.ui.graphics.Color.White
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 16.dp, end = 16.dp)
+                    .size(44.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(torchBg)
+                    .clickable {
+                        val next = !isTorchOn
+                        isTorchOn = next
+                        boundCamera.cameraControl.enableTorch(next)
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = torchIcon,
+                    contentDescription = if (isTorchOn) "Turn off torch" else "Turn on torch",
+                    tint = torchTint,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+
         SearchingIndicator(
             isVisible = isAutoEdgeDetectionEnabled && detectedCorners == null && frozenPreviewFrame == null,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
 
-        if (isAutoCaptureEnabled && autoCaptureProgress > 0f) {
-            AutoCaptureProgressArc(
-                progress = autoCaptureProgress,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 80.dp)
-            )
-        }
+        // AUTO-CAPTURE DISABLED
+        // if (isAutoCaptureEnabled && autoCaptureProgress > 0f) {
+        //     AutoCaptureProgressArc(
+        //         progress = autoCaptureProgress,
+        //         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 80.dp)
+        //     )
+        // }
     }
 }
 
@@ -460,6 +506,7 @@ private fun bindCameraPreview(
     previewView: PreviewView,
     autoEdgeDetectionEnabled: Boolean,
     onImageCaptureReady: (ImageCapture) -> Unit,
+    onCameraReady: (Camera) -> Unit,
     onStabilityProgress: (Float) -> Unit,
     onCornersUpdated: (List<PointF>?, Float?, Bitmap?) -> Unit,
     onError: (String) -> Unit
@@ -486,14 +533,13 @@ private fun bindCameraPreview(
                 val imageAnalysis =
                     ImageAnalysis.Builder()
                         .setTargetAspectRatio(androidx.camera.core.AspectRatio.RATIO_4_3)
+                        .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                         .build()
 
                 var lastDetectedCorners: List<PointF>? = null
                 var lastAspectRatio: Float? = null
                 var strikeOutCount = 0
-                var frameCount = 0L
-                val FRAME_SKIP = 3
                 var prevStableCorners: List<PointF>? = null
                 var stableFrameCount = 0
                 val STABLE_FRAMES_REQUIRED = 15
@@ -501,12 +547,6 @@ private fun bindCameraPreview(
 
                 imageAnalysis.setAnalyzer(analyzerExecutor) { imageProxy ->
                     try {
-                        frameCount++
-                        if (frameCount % FRAME_SKIP != 0L) {
-                            imageProxy.close()
-                            return@setAnalyzer
-                        }
-
                         val result = frameProcessor.processFrame(imageProxy, context)
                         val smoothedResult =
                             if (result != null && result.first != null && result.second != null) {
@@ -519,9 +559,11 @@ private fun bindCameraPreview(
                                     if (currentLast != null && currentLast.size == 4) {
                                         sorted.mapIndexed { index, newPt ->
                                             val oldPt = currentLast[index]
+                                            // Higher old-weight (0.55) means smaller per-frame jump,
+                                            // producing a smoother glide toward the new prediction.
                                             PointF(
-                                                oldPt.x * 0.2f + newPt.x * 0.8f,
-                                                oldPt.y * 0.2f + newPt.y * 0.8f
+                                                oldPt.x * 0.55f + newPt.x * 0.45f,
+                                                oldPt.y * 0.55f + newPt.y * 0.45f
                                             )
                                         }
                                     } else {
@@ -596,11 +638,14 @@ private fun bindCameraPreview(
 
             try {
                 cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(
+                val boundCamera = cameraProvider.bindToLifecycle(
                     lifecycleOwner,
                     CameraSelector.DEFAULT_BACK_CAMERA,
                     *useCases.toTypedArray()
                 )
+                ContextCompat.getMainExecutor(context).execute {
+                    onCameraReady(boundCamera)
+                }
             } catch (error: IllegalStateException) {
                 onError("Unable to bind camera: ${error.message ?: "unknown error"}")
             } catch (error: IllegalArgumentException) {
@@ -616,7 +661,31 @@ private fun sanitizeInitialBounds(bounds: List<PointF>?): List<PointF> {
     val clamped = bounds.map { point -> PointF(point.x.coerceIn(0f, 1f), point.y.coerceIn(0f, 1f)) }
     val area = kotlin.math.abs(polygonArea(clamped))
     if (area < 0.02f) return fullImageBounds()
+    if (!isConvexQuad(clamped)) return fullImageBounds()
     return clamped
+}
+
+/**
+ * Returns true if the four points (in order) form a convex (non-self-intersecting) quadrilateral.
+ * Uses the cross-product sign at each vertex; all signs must agree for the quad to be convex.
+ */
+private fun isConvexQuad(pts: List<PointF>): Boolean {
+    if (pts.size != 4) return false
+    var sign = 0
+    for (i in pts.indices) {
+        val a = pts[i]
+        val b = pts[(i + 1) % 4]
+        val c = pts[(i + 2) % 4]
+        val cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)
+        val s = when {
+            cross > 1e-6f  ->  1
+            cross < -1e-6f -> -1
+            else           ->  0   // collinear – degenerate edge
+        }
+        if (s == 0) return false   // collinear vertices → degenerate quad
+        if (sign == 0) sign = s else if (s != sign) return false
+    }
+    return true
 }
 
 private fun polygonArea(points: List<PointF>): Float {

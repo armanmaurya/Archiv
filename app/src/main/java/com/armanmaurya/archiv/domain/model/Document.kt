@@ -1,4 +1,4 @@
-package com.armanmaurya.archiv.data.document
+package com.armanmaurya.archiv.domain.model
 
 data class Document(
     val id: String,
@@ -7,4 +7,3 @@ data class Document(
     val fileSizeBytes: Long,
     val modifiedAtMillis: Long
 )
-

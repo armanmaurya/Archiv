@@ -8,7 +8,7 @@ import org.opencv.core.*
 import org.opencv.imgproc.Imgproc
 
 class OpenCVCornerDetector : CornerDetector {
-    override fun detect(src: Bitmap, ctx: Context): DetectionResult {
+    override fun detect(src: Bitmap, ctx: Context, isLiveAnalysis: Boolean): DetectionResult {
         val mat = Mat()
         Utils.bitmapToMat(src, mat)
         

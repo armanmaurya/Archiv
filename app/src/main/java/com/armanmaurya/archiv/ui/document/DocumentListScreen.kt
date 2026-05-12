@@ -15,10 +15,22 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ViewList
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.outlined.Build
+import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
@@ -37,6 +49,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,12 +60,11 @@ import androidx.core.content.ContextCompat
 import com.armanmaurya.archiv.R
 import com.armanmaurya.archiv.ui.document.components.DocumentItem
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun DocumentListScreen(
     viewModel: DocumentViewModel,
     onOpenScanner: () -> Unit,
-    onOpenPdfTools: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
     val context = LocalContext.current
@@ -60,6 +72,7 @@ fun DocumentListScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var pendingDeleteDocumentId by remember { mutableStateOf<String?>(null) }
     var pendingExportDocumentId by remember { mutableStateOf<String?>(null) }
+    var viewMode by rememberSaveable { mutableStateOf(DocumentListViewMode.List) }
 
     val exportPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -108,10 +121,26 @@ fun DocumentListScreen(
             CenterAlignedTopAppBar(
                 title = { Text(stringResource(R.string.document_list_title)) },
                 actions = {
-                    IconButton(onClick = onOpenPdfTools) {
+                    IconButton(
+                        onClick = {
+                            viewMode = if (viewMode == DocumentListViewMode.List) {
+                                DocumentListViewMode.Grid
+                            } else {
+                                DocumentListViewMode.List
+                            }
+                        }
+                    ) {
                         Icon(
-                            imageVector = Icons.Outlined.Build,
-                            contentDescription = "PDF Tools"
+                            imageVector = if (viewMode == DocumentListViewMode.List) {
+                                Icons.Outlined.GridView
+                            } else {
+                                Icons.AutoMirrored.Outlined.ViewList
+                            },
+                            contentDescription = if (viewMode == DocumentListViewMode.List) {
+                                stringResource(R.string.document_list_view_grid)
+                            } else {
+                                stringResource(R.string.document_list_view_list)
+                            }
                         )
                     }
                     IconButton(onClick = onOpenSettings) {
@@ -143,50 +172,125 @@ fun DocumentListScreen(
                 }
 
                 else -> {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        items(documents, key = { document -> document.id }) { document ->
-                            DocumentItem(
-                                document = document,
-                                actionEnabled = !viewModel.isLoading,
-                                onOpen = {
-                                    val openIntent = viewModel.createOpenIntent(document.id)
-                                    if (openIntent != null) {
-                                        try {
-                                            context.startActivity(
-                                                Intent.createChooser(openIntent, "Open scan")
-                                            )
-                                        } catch (_: ActivityNotFoundException) {
-                                            viewModel.onOpenAppUnavailable()
-                                        }
-                                    }
-                                },
-                                onShare = {
-                                    val shareIntent = viewModel.createShareIntent(document.id)
-                                    if (shareIntent != null) {
-                                        context.startActivity(
-                                            Intent.createChooser(shareIntent, "Share scan")
-                                        )
-                                    }
-                                },
-                                onExport = {
-                                    if (requiresLegacyWritePermission() &&
-                                        !hasLegacyWritePermission(context)
-                                    ) {
-                                        pendingExportDocumentId = document.id
-                                        exportPermissionLauncher.launch(
-                                            Manifest.permission.WRITE_EXTERNAL_STORAGE
-                                        )
-                                    } else {
-                                        viewModel.exportDocument(document.id)
-                                    }
-                                },
-                                onDelete = { pendingDeleteDocumentId = document.id },
-                                modifier = Modifier.fillMaxWidth()
+                    AnimatedContent(
+                        targetState = viewMode,
+                        transitionSpec = {
+                            (slideInVertically(initialOffsetY = { -it }) + fadeIn()).togetherWith(
+                                slideOutVertically(targetOffsetY = { it }) + fadeOut()
                             )
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                        label = "viewModeTransition"
+                    ) { mode ->
+                        if (mode == DocumentListViewMode.List) {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                items(
+                                    documents,
+                                    key = { document -> document.id }
+                                ) { document ->
+                                    DocumentItem(
+                                        document = document,
+                                        actionEnabled = !viewModel.isLoading,
+                                        compact = false,
+                                        onOpen = {
+                                            val openIntent = viewModel.createOpenIntent(document.id)
+                                            if (openIntent != null) {
+                                                try {
+                                                    context.startActivity(
+                                                        Intent.createChooser(openIntent, "Open scan")
+                                                    )
+                                                } catch (_: ActivityNotFoundException) {
+                                                    viewModel.onOpenAppUnavailable()
+                                                }
+                                            }
+                                        },
+                                        onShare = {
+                                            val shareIntent = viewModel.createShareIntent(document.id)
+                                            if (shareIntent != null) {
+                                                context.startActivity(
+                                                    Intent.createChooser(shareIntent, "Share scan")
+                                                )
+                                            }
+                                        },
+                                        onExport = {
+                                            if (requiresLegacyWritePermission() &&
+                                                !hasLegacyWritePermission(context)
+                                            ) {
+                                                pendingExportDocumentId = document.id
+                                                exportPermissionLauncher.launch(
+                                                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+                                                )
+                                            } else {
+                                                viewModel.exportDocument(document.id)
+                                            }
+                                        },
+                                        onDelete = { pendingDeleteDocumentId = document.id },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .animateItem()
+                                    )
+                                }
+                            }
+                        } else {
+                            LazyVerticalGrid(
+                                columns = GridCells.Adaptive(minSize = 180.dp),
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                items(
+                                    count = documents.size,
+                                    key = { index -> documents[index].id }
+                                ) { index ->
+                                    val document = documents[index]
+                                    DocumentItem(
+                                        document = document,
+                                        actionEnabled = !viewModel.isLoading,
+                                        compact = true,
+                                        onOpen = {
+                                            val openIntent = viewModel.createOpenIntent(document.id)
+                                            if (openIntent != null) {
+                                                try {
+                                                    context.startActivity(
+                                                        Intent.createChooser(openIntent, "Open scan")
+                                                    )
+                                                } catch (_: ActivityNotFoundException) {
+                                                    viewModel.onOpenAppUnavailable()
+                                                }
+                                            }
+                                        },
+                                        onShare = {
+                                            val shareIntent = viewModel.createShareIntent(document.id)
+                                            if (shareIntent != null) {
+                                                context.startActivity(
+                                                    Intent.createChooser(shareIntent, "Share scan")
+                                                )
+                                            }
+                                        },
+                                        onExport = {
+                                            if (requiresLegacyWritePermission() &&
+                                                !hasLegacyWritePermission(context)
+                                            ) {
+                                                pendingExportDocumentId = document.id
+                                                exportPermissionLauncher.launch(
+                                                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+                                                )
+                                            } else {
+                                                viewModel.exportDocument(document.id)
+                                            }
+                                        },
+                                        onDelete = { pendingDeleteDocumentId = document.id },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .animateItem()
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -227,5 +331,10 @@ private fun hasLegacyWritePermission(context: android.content.Context): Boolean 
         context,
         Manifest.permission.WRITE_EXTERNAL_STORAGE
     ) == PackageManager.PERMISSION_GRANTED
+}
+
+private enum class DocumentListViewMode {
+    List,
+    Grid
 }
 

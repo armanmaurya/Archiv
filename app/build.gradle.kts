@@ -37,6 +37,7 @@ android {
     }
     buildFeatures {
         compose = true
+        mlModelBinding = true
     }
 
     splits {
@@ -70,7 +71,9 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.reorderable)
-    implementation(libs.onnxruntime.android)
+    implementation(libs.litert)
+    implementation(libs.litert.support)
+    implementation(libs.litert.metadata)
     implementation("org.opencv:opencv:4.10.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.datastore:datastore-preferences:1.1.1")

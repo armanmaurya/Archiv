@@ -51,6 +51,39 @@ internal fun applyBitmapFilter(bitmap: Bitmap, mode: Int): Bitmap {
                 )
             )
 
+            // Boosted saturation (2x) with a slight contrast lift
+            FilterMode.VIBRANT -> ColorMatrixColorFilter(
+                ColorMatrix().also { cm ->
+                    cm.setSaturation(2.2f)
+                    // Contrast lift: scale by ~1.2 and shift to keep midtones
+                    val contrast = ColorMatrix(
+                        floatArrayOf(
+                            1.2f, 0f,   0f,   0f, -25f,
+                            0f,   1.2f, 0f,   0f, -25f,
+                            0f,   0f,   1.2f, 0f, -25f,
+                            0f,   0f,   0f,   1f,   0f
+                        )
+                    )
+                    cm.postConcat(contrast)
+                }
+            )
+
+            // High-contrast black-and-white (desaturate then strong contrast boost)
+            FilterMode.SHARP_BLACK -> ColorMatrixColorFilter(
+                ColorMatrix().also { cm ->
+                    cm.setSaturation(0f)
+                    val contrast = ColorMatrix(
+                        floatArrayOf(
+                            1.8f, 0f,   0f,   0f, -80f,
+                            0f,   1.8f, 0f,   0f, -80f,
+                            0f,   0f,   1.8f, 0f, -80f,
+                            0f,   0f,   0f,   1f,   0f
+                        )
+                    )
+                    cm.postConcat(contrast)
+                }
+            )
+
             else -> null
         }
     }

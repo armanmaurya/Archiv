@@ -7,5 +7,5 @@ import android.graphics.Bitmap
  * Schlanke Abstraktion für Corner-Detection.
  */
 interface CornerDetector {
-    fun detect(src: Bitmap, ctx: Context): DetectionResult
+    fun detect(src: Bitmap, ctx: Context, isLiveAnalysis: Boolean = false): DetectionResult
 }
