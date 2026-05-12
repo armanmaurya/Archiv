@@ -2,6 +2,12 @@ package com.armanmaurya.archiv.ui.scanner
 
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
@@ -22,7 +28,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -46,10 +52,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.armanmaurya.archiv.R
 import com.armanmaurya.archiv.bitmap.decodeSampledBitmap
-import com.armanmaurya.archiv.ml.corners.DocQuadDetector
-import com.armanmaurya.archiv.ml.corners.FallbackDetector
-import com.armanmaurya.archiv.ml.corners.OpenCVCornerDetector
-import com.armanmaurya.archiv.ml.docquad.DocQuadOrtRunner
+import com.armanmaurya.archiv.data.repository.DocumentRepository
+import com.armanmaurya.archiv.ml.corners.DocCornerDetector
+import com.armanmaurya.archiv.ml.corners.DocCornerTFLiteRunner
 import com.armanmaurya.archiv.ui.scanner.components.CameraPreview
 import com.armanmaurya.archiv.ui.scanner.components.GalleryButton
 import com.armanmaurya.archiv.ui.scanner.components.ThumbnailStrip
@@ -62,7 +67,8 @@ import kotlinx.coroutines.withContext
 fun ScannerScreen(
         viewModel: ScannerViewModel,
         onOpenEditor: (Int) -> Unit,
-        onExitScanner: () -> Unit,
+    onExitScanner: () -> Unit,
+    onOpenDocumentList: () -> Unit,
         scrollToIndexHint: Int? = null,
         onScrollHintConsumed: () -> Unit = {},
         sharedTransitionScope: SharedTransitionScope? = null,
@@ -75,6 +81,8 @@ fun ScannerScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
+    val repository = remember(context) { DocumentRepository(context.applicationContext) }
+
     var captureRequestKey by remember { mutableStateOf(0L) }
     var openLastRequestToken by remember { mutableStateOf(0L) }
     var scannerErrorMessage by remember { mutableStateOf<String?>(null) }
@@ -86,11 +94,22 @@ fun ScannerScreen(
 
     val visibleErrorMessage = scannerErrorMessage ?: viewModel.saveErrorMessage
 
-    // Preload DocQuadDetector model on screen entry to avoid freeze on first frame
+    val pendingSavedDocumentId = viewModel.pendingSavedDocumentId
+    var navigatedToDocumentListAfterSave by remember { mutableStateOf(false) }
+
+    LaunchedEffect(pendingSavedDocumentId) {
+        if (pendingSavedDocumentId != null) {
+            navigatedToDocumentListAfterSave = true
+            viewModel.consumeSavedDocumentEvent()
+            onOpenDocumentList()
+        }
+    }
+
+    // Preload DocCornerDetector model on screen entry to avoid freeze on first frame
     LaunchedEffect(Unit) {
         coroutineScope.launch(Dispatchers.Default) {
             try {
-                DocQuadOrtRunner.getInstanceAsync(context, DocQuadDetector.DEFAULT_MODEL_ASSET_PATH).get()
+                DocCornerTFLiteRunner.getInstanceAsync(context, DocCornerDetector.DEFAULT_MODEL_ASSET_PATH).get()
             } catch (e: Exception) {
                 // Model preload failed, but processFrame has fallback logic
             }
@@ -114,11 +133,26 @@ fun ScannerScreen(
         }
     }
 
+    val focusRequester = remember { FocusRequester() }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .focusRequester(focusRequester)
+            .focusable()
+            .onKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                if (native != null && native.keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT && native.action == android.view.KeyEvent.ACTION_DOWN) {
+                    if (pages.isNotEmpty()) {
+                        onOpenEditor(pages.lastIndex)
+                        return@onKeyEvent true
+                    }
+                }
+                false
+            }
     ) {
+        LaunchedEffect(Unit) { focusRequester.requestFocus() }
         Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
             CameraPreview(
                 captureRequestKey = captureRequestKey,
@@ -153,25 +187,22 @@ fun ScannerScreen(
                         val copiedUris = withContext(Dispatchers.IO) {
                             uris.mapNotNull { uri -> copyUriToCache(context, uri) }
                         }
-                        
+
                         // Perform edge detection on each imported image if enabled
                         if (isAutoEdgeDetectionEnabled && copiedUris.isNotEmpty()) {
                             val detector = withContext(Dispatchers.Default) {
-                                val runner = DocQuadOrtRunner.getInstance(context, DocQuadDetector.DEFAULT_MODEL_ASSET_PATH)
-                                DocQuadDetector(runner)
+                                val runner = DocCornerTFLiteRunner.getInstance(context, DocCornerDetector.DEFAULT_MODEL_ASSET_PATH)
+                                DocCornerDetector(runner)
                             }
-                            /*
-                            val detector = OpenCVCornerDetector()
-                            */
 
                             copiedUris.forEach { uri ->
                                 var detectedBounds: List<android.graphics.PointF>? = null
                                 withContext(Dispatchers.Default) {
                                     decodeSampledBitmap(context, uri)?.let { bitmap ->
                                         try {
-                                            val result = detector.detect(bitmap, context)
+                                            val result = detector.detect(bitmap, context, false)
                                             if (result.success && result.cornersOriginalTLTRBRBL != null) {
-                                                detectedBounds = result.cornersOriginalTLTRBRBL.map { 
+                                                detectedBounds = result.cornersOriginalTLTRBRBL.map {
                                                     android.graphics.PointF(
                                                         (it[0] / bitmap.width).toFloat(),
                                                         (it[1] / bitmap.height).toFloat()
@@ -188,7 +219,7 @@ fun ScannerScreen(
                         } else {
                             copiedUris.forEach { uri -> viewModel.addPage(uri) }
                         }
-                        
+
                         if (copiedUris.isEmpty()) {
                             scannerErrorMessage = "Unable to import selected images."
                         }
@@ -205,7 +236,6 @@ fun ScannerScreen(
 
             AutoEdgeDetectionButton(
                 isEnabled = isAutoEdgeDetectionEnabled,
-                enabled = !isScreenBusy,
                 onToggle = { isAutoEdgeDetectionEnabled = !isAutoEdgeDetectionEnabled }
             )
         }
@@ -239,7 +269,7 @@ fun ScannerScreen(
             }
 
             OpenLastImageButton(
-                onOpenLast = { openLastRequestToken++ },
+                        onOpenLast = { viewModel.savePagesAsPdf(context, repository) },
                 enabled = !isScreenBusy && pages.isNotEmpty(),
                 modifier = Modifier
                     .fillMaxHeight()
@@ -376,8 +406,8 @@ fun OpenLastImageButton(
         contentAlignment = Alignment.Center
     ) {
         Icon(
-            Icons.AutoMirrored.Filled.ArrowForward,
-            contentDescription = "Open last image",
+            Icons.Filled.Check,
+            contentDescription = "Save",
             tint = iconColor,
             modifier = Modifier.size(28.dp)
         )

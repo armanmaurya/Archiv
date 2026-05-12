@@ -25,11 +25,6 @@ import com.armanmaurya.archiv.ui.scanner.ScannerViewModel
 import com.armanmaurya.archiv.ui.scanner.EditorScreen
 import com.armanmaurya.archiv.ui.document.DocumentListScreen
 import com.armanmaurya.archiv.ui.document.DocumentViewModel
-import com.armanmaurya.archiv.ui.document.MergePdfsScreen
-import com.armanmaurya.archiv.ui.document.PdfToolsScreen
-import com.armanmaurya.archiv.ui.document.PdfToolsViewModel
-import com.armanmaurya.archiv.ui.document.ReorderPdfScreen
-import com.armanmaurya.archiv.ui.document.SplitPdfScreen
 import com.armanmaurya.archiv.ui.settings.AboutScreen
 import com.armanmaurya.archiv.ui.settings.SettingsScreen
 import com.armanmaurya.archiv.ui.settings.SettingsViewModel
@@ -74,11 +69,6 @@ fun AppNavHost(
                             launchSingleTop = true
                         }
                     },
-                    onOpenPdfTools = {
-                        navController.navigate(Screen.PDF_TOOLS_FLOW) {
-                            launchSingleTop = true
-                        }
-                    },
                     onOpenSettings = {
                         navController.navigate(Screen.SETTINGS) {
                             launchSingleTop = true
@@ -88,107 +78,28 @@ fun AppNavHost(
             }
 
             navigation(
-                startDestination = Screen.PDF_TOOLS,
-                route = Screen.PDF_TOOLS_FLOW
-            ) {
-                composable(
-                    route = Screen.PDF_TOOLS,
-                    enterTransition = { slideInHorizontally(initialOffsetX = { it }) },
-                    exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) },
-                    popEnterTransition = { slideInHorizontally(initialOffsetX = { -it }) },
-                    popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) }
-                ) { backStackEntry ->
-                    val parentEntry = remember(backStackEntry) {
-                        navController.getBackStackEntry(Screen.PDF_TOOLS_FLOW)
-                    }
-                    val viewModel: PdfToolsViewModel = viewModel(
-                        parentEntry,
-                        factory = PdfToolsViewModel.factory(context)
-                    )
-                    PdfToolsScreen(
-                        onBack = { navController.popBackStack() },
-                        onOpenMerge = { selectedUris ->
-                            viewModel.setMergeUris(selectedUris)
-                            navController.navigate(Screen.PDF_TOOLS_MERGE)
-                        },
-                        onOpenSplit = { navController.navigate(Screen.PDF_TOOLS_SPLIT) },
-                        onOpenReorder = { selectedUri ->
-                            viewModel.selectReorderUri(selectedUri)
-                            navController.navigate(Screen.PDF_TOOLS_REORDER)
-                        }
-                    )
-                }
-
-                composable(
-                    route = Screen.PDF_TOOLS_MERGE,
-                    enterTransition = { slideInHorizontally(initialOffsetX = { it }) },
-                    exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) },
-                    popEnterTransition = { slideInHorizontally(initialOffsetX = { -it }) },
-                    popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) }
-                ) { backStackEntry ->
-                    val parentEntry = remember(backStackEntry) {
-                        navController.getBackStackEntry(Screen.PDF_TOOLS_FLOW)
-                    }
-                    val viewModel: PdfToolsViewModel = viewModel(
-                        parentEntry,
-                        factory = PdfToolsViewModel.factory(context)
-                    )
-                    MergePdfsScreen(
-                        viewModel = viewModel,
-                        onBack = { navController.popBackStack() }
-                    )
-                }
-
-                composable(
-                    route = Screen.PDF_TOOLS_SPLIT,
-                    enterTransition = { slideInHorizontally(initialOffsetX = { it }) },
-                    exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) },
-                    popEnterTransition = { slideInHorizontally(initialOffsetX = { -it }) },
-                    popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) }
-                ) { backStackEntry ->
-                    val parentEntry = remember(backStackEntry) {
-                        navController.getBackStackEntry(Screen.PDF_TOOLS_FLOW)
-                    }
-                    val viewModel: PdfToolsViewModel = viewModel(
-                        parentEntry,
-                        factory = PdfToolsViewModel.factory(context)
-                    )
-                    SplitPdfScreen(
-                        viewModel = viewModel,
-                        onBack = { navController.popBackStack() }
-                    )
-                }
-
-                composable(
-                    route = Screen.PDF_TOOLS_REORDER,
-                    enterTransition = { slideInHorizontally(initialOffsetX = { it }) },
-                    exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) },
-                    popEnterTransition = { slideInHorizontally(initialOffsetX = { -it }) },
-                    popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) }
-                ) { backStackEntry ->
-                    val parentEntry = remember(backStackEntry) {
-                        navController.getBackStackEntry(Screen.PDF_TOOLS_FLOW)
-                    }
-                    val viewModel: PdfToolsViewModel = viewModel(
-                        parentEntry,
-                        factory = PdfToolsViewModel.factory(context)
-                    )
-                    ReorderPdfScreen(
-                        viewModel = viewModel,
-                        onBack = { navController.popBackStack() }
-                    )
-                }
-            }
-
-            navigation(
                 startDestination = Screen.CAMERA,
                 route = Screen.SCANNER_FLOW
             ) {
                 composable(
                     route = Screen.CAMERA,
                     enterTransition = { slideInHorizontally(initialOffsetX = { it }) },
-                    exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) },
-                    popEnterTransition = { slideInHorizontally(initialOffsetX = { -it }) },
+                    exitTransition = {
+                        val targetRoute = targetState?.destination?.route
+                        if (targetRoute == Screen.EDITOR_ROUTE) {
+                            null
+                        } else {
+                            slideOutHorizontally(targetOffsetX = { -it })
+                        }
+                    },
+                    popEnterTransition = {
+                        val fromRoute = initialState?.destination?.route
+                        if (fromRoute == Screen.EDITOR_ROUTE) {
+                            null
+                        } else {
+                            slideInHorizontally(initialOffsetX = { -it })
+                        }
+                    },
                     popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) }
                 ) { backStackEntry ->
 
@@ -200,6 +111,12 @@ fun AppNavHost(
                             navController.navigate(Screen.editorRoute(startIndex))
                         },
                         onExitScanner = { navController.popBackStack() },
+                        onOpenDocumentList = {
+                            navController.navigate(Screen.DOCUMENTS) {
+                                popUpTo(Screen.DOCUMENTS) { inclusive = false }
+                                launchSingleTop = true
+                            }
+                        },
                         scrollToIndexHint = scrollToIndexHint,
                         onScrollHintConsumed = { scrollToIndexHint = null },
                         sharedTransitionScope = this@SharedTransitionLayout,
@@ -215,11 +132,7 @@ fun AppNavHost(
                             type = NavType.IntType
                             defaultValue = 0
                         }
-                    ),
-                    enterTransition = { slideInHorizontally(initialOffsetX = { it }) },
-                    exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) },
-                    popEnterTransition = { slideInHorizontally(initialOffsetX = { -it }) },
-                    popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) }
+                    )
                 ) { backStackEntry ->
 
                     val viewModel: ScannerViewModel = backStackEntry.sharedViewModel(navController)

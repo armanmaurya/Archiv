@@ -21,6 +21,7 @@ import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.armanmaurya.archiv.data.repository.DocumentRepository
 
 data class PageState(
     val uri: Uri,
@@ -111,7 +112,7 @@ class ScannerViewModel : ViewModel() {
         pendingSavedDocumentId = null
     }
 
-    fun savePagesAsPdf(context: Context, storage: ScannerPdfStorage) {
+    fun savePagesAsPdf(context: Context, repository: DocumentRepository) {
         val pagesToSave = pages
         if (pagesToSave.isEmpty()) {
             saveErrorMessage = "Capture at least one page before saving."
@@ -150,7 +151,7 @@ class ScannerViewModel : ViewModel() {
                     }
                 }
                 val savedFile = withContext(Dispatchers.IO) {
-                    storage.savePdf(pdfBytes)
+                    repository.savePdfToAppStorage(pdfBytes)
                 }
                 pendingSavedDocumentId = savedFile.name
                 clearPages()

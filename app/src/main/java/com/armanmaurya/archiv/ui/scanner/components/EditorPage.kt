@@ -7,9 +7,15 @@ import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.Image
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -53,6 +59,7 @@ fun EditorPage(
     animatedVisibilityScope: AnimatedVisibilityScope?,
     sharedElementKeyForUri: (Uri) -> String,
     onEditingBoundsChange: (List<PointF>) -> Unit,
+    onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -197,16 +204,44 @@ fun EditorPage(
                 } else {
                     Modifier
                 }
+            var dismissOffset by remember { mutableStateOf(Offset.Zero) }
+            var isDismissDragging by remember { mutableStateOf(false) }
+            var isDismissed by remember { mutableStateOf(false) }
+            val animatedDismissOffsetX by animateFloatAsState(
+                targetValue = dismissOffset.x,
+                animationSpec = if (isDismissDragging) snap() else spring(),
+                label = "dismissX"
+            )
+            val animatedDismissOffsetY by animateFloatAsState(
+                targetValue = dismissOffset.y,
+                animationSpec = if (isDismissDragging) snap() else spring(),
+                label = "dismissY"
+            )
+
+            val targetDismissScale = if (dismissOffset == Offset.Zero) 1f else {
+                (1f - (dismissOffset.getDistance() / 1500f)).coerceIn(0.7f, 1f)
+            }
+            val animatedDismissScale by animateFloatAsState(
+                targetValue = targetDismissScale,
+                animationSpec = if (isDismissDragging) snap() else spring(),
+                label = "dismissScale"
+            )
+
             val cropTransformModifier =
                 if (isEditableCropPage || isZoomableViewPage) {
                     Modifier
                         .graphicsLayer {
                             val activeZoom = if (isEditableCropPage) cropZoom else viewZoom
                             val activeOffset = if (isEditableCropPage) cropOffset else viewOffset
-                            scaleX = activeZoom
-                            scaleY = activeZoom
-                            translationX = activeOffset.x
-                            translationY = activeOffset.y
+                            
+                            val finalDismissScale = if (isDismissed) targetDismissScale else animatedDismissScale
+                            val finalDismissOffsetX = if (isDismissed) dismissOffset.x else animatedDismissOffsetX
+                            val finalDismissOffsetY = if (isDismissed) dismissOffset.y else animatedDismissOffsetY
+                            
+                            scaleX = activeZoom * finalDismissScale
+                            scaleY = activeZoom * finalDismissScale
+                            translationX = activeOffset.x + finalDismissOffsetX
+                            translationY = activeOffset.y + finalDismissOffsetY
                         }
                 } else {
                     Modifier
@@ -222,6 +257,49 @@ fun EditorPage(
                 } else {
                     Modifier
                 }
+                
+            val dismissGestureModifier = if (isZoomableViewPage && viewZoom == 1f) {
+                Modifier.pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown()
+                        var isDismissing = false
+                        var accumulatedOffset = Offset.Zero
+                        
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull()
+                            if (change == null || !change.pressed) {
+                                if (isDismissing && dismissOffset.getDistance() > 100f) {
+                                    isDismissed = true
+                                    onDismiss()
+                                    break // Do not reset offset, leave it for the hero transition
+                                }
+                                isDismissDragging = false
+                                dismissOffset = Offset.Zero
+                                break
+                            }
+                            
+                            val dragAmount = change.position - change.previousPosition
+                            accumulatedOffset += dragAmount
+                            
+                            if (!isDismissing) {
+                                if (accumulatedOffset.y > 20f && accumulatedOffset.y > kotlin.math.abs(accumulatedOffset.x)) {
+                                    isDismissing = true
+                                    isDismissDragging = true
+                                } else if (kotlin.math.abs(accumulatedOffset.x) > 20f || accumulatedOffset.y < -20f) {
+                                    break // Not a downward drag, let other detectors handle it
+                                }
+                            }
+                            
+                            if (isDismissing) {
+                                dismissOffset += dragAmount
+                                change.consume()
+                            }
+                        }
+                    }
+                }
+            } else Modifier
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -231,6 +309,7 @@ fun EditorPage(
                         containerHeight = it.height
                     }
                     .then(cropGestureModifier)
+                    .then(dismissGestureModifier)
                     .then(cropTransformModifier),
                 contentAlignment = Alignment.Center
             ) {

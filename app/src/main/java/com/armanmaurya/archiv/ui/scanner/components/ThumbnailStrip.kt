@@ -328,7 +328,7 @@ private fun ThumbnailItem(
                 Image(
                     bitmap = it,
                     contentDescription = "Captured Page",
-                    contentScale = ContentScale.Crop,
+                    contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxSize().then(sharedImageModifier)
                 )
             }

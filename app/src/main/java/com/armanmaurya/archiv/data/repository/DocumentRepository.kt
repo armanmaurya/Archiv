@@ -1,4 +1,4 @@
-package com.armanmaurya.archiv.data.document
+package com.armanmaurya.archiv.data.repository
 
 import android.content.ContentValues
 import android.content.Context
@@ -8,15 +8,18 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import androidx.annotation.RequiresApi
+import androidx.core.content.FileProvider
 import androidx.core.net.toUri
+import com.armanmaurya.archiv.domain.model.Document
 import java.io.File
+import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class PdfStorage(context: Context) {
+class DocumentRepository(context: Context) {
 
     private val appContext = context.applicationContext
 
@@ -42,6 +45,29 @@ class PdfStorage(context: Context) {
         }
 
         return outputFile
+    }
+
+    fun listDocuments(): List<Document> =
+        listAppPdfFiles().map { file -> file.toDocument() }
+
+    fun getShareUri(documentId: String): Uri {
+        val file = requireDocumentFile(documentId)
+        return FileProvider.getUriForFile(
+            appContext,
+            "${appContext.packageName}.fileprovider",
+            file
+        )
+    }
+
+    fun exportDocument(documentId: String): Uri {
+        val file = requireDocumentFile(documentId)
+        return exportToDownloads(file)
+    }
+
+    fun deleteDocument(documentId: String) {
+        if (!deleteAppPdfFile(documentId)) {
+            throw IOException("Unable to delete the selected document.")
+        }
     }
 
     fun listAppPdfFiles(): List<File> {
@@ -85,6 +111,11 @@ class PdfStorage(context: Context) {
         } else {
             exportToLegacyDownloads(sourceFile)
         }
+    }
+
+    private fun requireDocumentFile(documentId: String): File {
+        return resolveAppPdfFile(documentId)
+            ?: throw FileNotFoundException("Document not found.")
     }
 
     private fun requireAppDocumentsDir(): File {
@@ -169,7 +200,7 @@ class PdfStorage(context: Context) {
         var candidate = File(directory, "$baseName.$extension")
         var index = 1
         while (candidate.exists()) {
-            candidate = File(directory, "${baseName}_$index.$extension")
+            candidate = File(directory, "${'$'}{baseName}_$index.$extension")
             index++
         }
         return candidate
@@ -192,5 +223,14 @@ class PdfStorage(context: Context) {
             "$trimmed.pdf"
         }
     }
-}
 
+    private fun File.toDocument(): Document {
+        return Document(
+            id = name,
+            fileName = name,
+            filePath = absolutePath,
+            fileSizeBytes = length(),
+            modifiedAtMillis = lastModified()
+        )
+    }
+}

@@ -10,8 +10,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.armanmaurya.archiv.data.document.Document
-import com.armanmaurya.archiv.data.document.DocumentRepository
+import com.armanmaurya.archiv.data.repository.DocumentRepository
+import com.armanmaurya.archiv.domain.model.Document
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

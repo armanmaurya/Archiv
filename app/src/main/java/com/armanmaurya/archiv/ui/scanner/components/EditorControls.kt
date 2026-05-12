@@ -2,6 +2,7 @@ package com.armanmaurya.archiv.ui.scanner.components
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -9,7 +10,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -26,6 +29,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
@@ -63,6 +67,8 @@ fun EditorControls(
     nonePreview: ImageBitmap?,
     bwPreview: ImageBitmap?,
     sepiaPreview: ImageBitmap?,
+    vibrantPreview: ImageBitmap?,
+    sharpBlackPreview: ImageBitmap?,
     onStartEdit: () -> Unit,
     onStartFilter: () -> Unit,
     onResetCrop: () -> Unit,
@@ -71,7 +77,10 @@ fun EditorControls(
     onClearFilter: () -> Unit,
     onSelectBw: () -> Unit,
     onSelectSepia: () -> Unit,
+    onSelectVibrant: () -> Unit,
+    onSelectSharpBlack: () -> Unit,
     onApplyFilter: () -> Unit,
+    onDelete: () -> Unit,
     bottomContent: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -92,13 +101,21 @@ fun EditorControls(
         exit = fadeOut() + slideOutVertically { it / 2 }
     ) {
         Surface(
-            modifier = Modifier.fillMaxWidth().animateContentSize(),
+            modifier = Modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
             tonalElevation = 6.dp,
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
-                AnimatedContent(targetState = mode, label = "editor-controls-mode") { currentMode ->
+                AnimatedContent(
+                    targetState = mode,
+                    label = "editor-controls-mode",
+                    transitionSpec = {
+                        (fadeIn(tween(220, delayMillis = 90)) togetherWith
+                            fadeOut(tween(90)))
+                            .using(SizeTransform(clip = false, sizeAnimationSpec = { _, _ -> tween(300) }))
+                    }
+                ) { currentMode ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -114,11 +131,23 @@ fun EditorControls(
                                     Text(stringResource(R.string.editor_crop_rotate))
                                 }
 
-                            FilledTonalButton(onClick = onStartFilter, shape = RoundedCornerShape(50)) {
-                                Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Text(stringResource(R.string.editor_filter))
+                                FilledTonalButton(onClick = onStartFilter, shape = RoundedCornerShape(50)) {
+                                    Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Text(stringResource(R.string.editor_filter))
+                                }
+
+                                FilledTonalButton(
+                                    onClick = onDelete,
+                                    shape = RoundedCornerShape(50),
+                                    colors = ButtonDefaults.filledTonalButtonColors(
+                                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                ) {
+                                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Text("Delete")
+                                }
                             }
-                        }
 
                             EditorControlMode.Crop -> {
                                 FilledTonalButton(onClick = onResetCrop, shape = RoundedCornerShape(50)) {
@@ -151,6 +180,20 @@ fun EditorControls(
                                     label = "Sepia",
                                     selected = selectedFilter == FilterMode.SEPIA,
                                     onClick = onSelectSepia
+                                )
+
+                                FilterThumbnailButton(
+                                    preview = vibrantPreview,
+                                    label = "Vibrant",
+                                    selected = selectedFilter == FilterMode.VIBRANT,
+                                    onClick = onSelectVibrant
+                                )
+
+                                FilterThumbnailButton(
+                                    preview = sharpBlackPreview,
+                                    label = "Sharp Black",
+                                    selected = selectedFilter == FilterMode.SHARP_BLACK,
+                                    onClick = onSelectSharpBlack
                                 )
                             }
                         }
@@ -189,6 +232,8 @@ fun EditorControls(
         nonePreview = null,
         bwPreview = null,
         sepiaPreview = null,
+        vibrantPreview = null,
+        sharpBlackPreview = null,
         onStartEdit = onStartEdit,
         onStartFilter = onStartFilter,
         onResetCrop = {},
@@ -197,7 +242,10 @@ fun EditorControls(
         onClearFilter = {},
         onSelectBw = {},
         onSelectSepia = {},
-        onApplyFilter = onApplyFilter
+        onSelectVibrant = {},
+        onSelectSharpBlack = {},
+        onApplyFilter = onApplyFilter,
+        onDelete = {}
     )
 }
 

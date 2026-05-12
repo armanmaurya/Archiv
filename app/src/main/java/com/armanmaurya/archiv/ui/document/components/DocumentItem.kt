@@ -40,8 +40,11 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.armanmaurya.archiv.data.document.Document
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.spring
+import com.armanmaurya.archiv.domain.model.Document
 import java.io.File
 import java.io.IOException
 import java.text.DateFormat
@@ -55,6 +58,7 @@ import kotlinx.coroutines.withContext
 fun DocumentItem(
     document: Document,
     actionEnabled: Boolean,
+    compact: Boolean = false,
     onOpen: () -> Unit,
     onShare: () -> Unit,
     onExport: () -> Unit,
@@ -64,66 +68,134 @@ fun DocumentItem(
     ElevatedCard(
         modifier = modifier
             .fillMaxWidth()
+            .animateContentSize(animationSpec = spring(dampingRatio = 0.8f))
             .clickable(enabled = actionEnabled, onClick = onOpen),
         shape = RoundedCornerShape(8.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(110.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            PdfThumbnail(
-                document = document,
-                modifier = Modifier
-                    .width(100.dp)
-                    .height(110.dp)
-            )
+        if (compact) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                PdfThumbnail(
+                    document = document,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(255.dp)  // A4 ratio (1:√2) relative to 180 dp column width
+                )
 
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(vertical = 10.dp)
-            ) {
-                Text(
-                    text = formatDisplayName(document.fileName),
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold
-                    )
-                )
-                Text(
-                    text = "${formatFileSize(document.fileSizeBytes)} • ${formatTimestamp(document.modifiedAtMillis)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.Start
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp)
                 ) {
-                    IconButton(onClick = onShare, enabled = actionEnabled) { 
-                        Icon(
-                            Icons.Filled.Share, 
-                            contentDescription = "Share",
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        ) 
+                    Text(
+                        text = formatDisplayName(document.fileName),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                    Text(
+                        text = formatFileSize(document.fileSizeBytes),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = formatTimestamp(document.modifiedAtMillis),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.Start
+                    ) {
+                        IconButton(onClick = onShare, enabled = actionEnabled) {
+                            Icon(
+                                Icons.Filled.Share,
+                                contentDescription = "Share",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = onExport, enabled = actionEnabled) {
+                            Icon(
+                                Icons.Filled.GetApp,
+                                contentDescription = "Export",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = onDelete, enabled = actionEnabled) {
+                            Icon(
+                                Icons.Filled.Delete,
+                                contentDescription = "Delete",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
-                    IconButton(onClick = onExport, enabled = actionEnabled) { 
-                        Icon(
-                            Icons.Filled.GetApp, 
-                            contentDescription = "Export",
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        ) 
-                    }
-                    IconButton(onClick = onDelete, enabled = actionEnabled) { 
-                        Icon(
-                            Icons.Filled.Delete, 
-                            contentDescription = "Delete",
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        ) 
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(110.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                PdfThumbnail(
+                    document = document,
+                    modifier = Modifier
+                        .width(100.dp)
+                        .height(110.dp)
+                )
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(vertical = 10.dp)
+                ) {
+                    Text(
+                        text = formatDisplayName(document.fileName),
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                    Text(
+                        text = "${formatFileSize(document.fileSizeBytes)} • ${formatTimestamp(document.modifiedAtMillis)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.Start
+                    ) {
+                        IconButton(onClick = onShare, enabled = actionEnabled) {
+                            Icon(
+                                Icons.Filled.Share,
+                                contentDescription = "Share",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = onExport, enabled = actionEnabled) {
+                            Icon(
+                                Icons.Filled.GetApp,
+                                contentDescription = "Export",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = onDelete, enabled = actionEnabled) {
+                            Icon(
+                                Icons.Filled.Delete,
+                                contentDescription = "Delete",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
@@ -250,5 +322,5 @@ private fun formatFileSize(bytes: Long): String {
 }
 
 private const val THUMBNAIL_WIDTH_PX = 216
-private const val THUMBNAIL_HEIGHT_PX = 288
+private const val THUMBNAIL_HEIGHT_PX = 306  // A4 ratio: 216 × √2 ≈ 306
 
