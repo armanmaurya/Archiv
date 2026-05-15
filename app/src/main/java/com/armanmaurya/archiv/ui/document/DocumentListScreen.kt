@@ -46,10 +46,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,10 +69,10 @@ fun DocumentListScreen(
 ) {
     val context = LocalContext.current
     val documents = viewModel.documents
+    val isGridView by viewModel.isDocumentListGridView.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var pendingDeleteDocumentId by remember { mutableStateOf<String?>(null) }
     var pendingExportDocumentId by remember { mutableStateOf<String?>(null) }
-    var viewMode by rememberSaveable { mutableStateOf(DocumentListViewMode.List) }
 
     val exportPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -121,27 +121,25 @@ fun DocumentListScreen(
             CenterAlignedTopAppBar(
                 title = { Text(stringResource(R.string.document_list_title)) },
                 actions = {
-                    IconButton(
-                        onClick = {
-                            viewMode = if (viewMode == DocumentListViewMode.List) {
-                                DocumentListViewMode.Grid
-                            } else {
-                                DocumentListViewMode.List
+                    if (isGridView != null) {
+                        IconButton(
+                            onClick = {
+                                viewModel.setDocumentListGridView(!isGridView!!)
                             }
+                        ) {
+                            Icon(
+                                imageVector = if (isGridView == true) {
+                                    Icons.AutoMirrored.Outlined.ViewList
+                                } else {
+                                    Icons.Outlined.GridView
+                                },
+                                contentDescription = if (isGridView == true) {
+                                    stringResource(R.string.document_list_view_list)
+                                } else {
+                                    stringResource(R.string.document_list_view_grid)
+                                }
+                            )
                         }
-                    ) {
-                        Icon(
-                            imageVector = if (viewMode == DocumentListViewMode.List) {
-                                Icons.Outlined.GridView
-                            } else {
-                                Icons.AutoMirrored.Outlined.ViewList
-                            },
-                            contentDescription = if (viewMode == DocumentListViewMode.List) {
-                                stringResource(R.string.document_list_view_grid)
-                            } else {
-                                stringResource(R.string.document_list_view_list)
-                            }
-                        )
                     }
                     IconButton(onClick = onOpenSettings) {
                         Icon(
@@ -171,9 +169,13 @@ fun DocumentListScreen(
                     )
                 }
 
+                isGridView == null -> {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                }
+
                 else -> {
                     AnimatedContent(
-                        targetState = viewMode,
+                        targetState = isGridView == true,
                         transitionSpec = {
                             (slideInVertically(initialOffsetY = { -it }) + fadeIn()).togetherWith(
                                 slideOutVertically(targetOffsetY = { it }) + fadeOut()
@@ -181,8 +183,8 @@ fun DocumentListScreen(
                         },
                         modifier = Modifier.fillMaxSize(),
                         label = "viewModeTransition"
-                    ) { mode ->
-                        if (mode == DocumentListViewMode.List) {
+                    ) { gridView ->
+                        if (!gridView) {
                             LazyColumn(
                                 modifier = Modifier.fillMaxSize(),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
@@ -331,10 +333,5 @@ private fun hasLegacyWritePermission(context: android.content.Context): Boolean 
         context,
         Manifest.permission.WRITE_EXTERNAL_STORAGE
     ) == PackageManager.PERMISSION_GRANTED
-}
-
-private enum class DocumentListViewMode {
-    List,
-    Grid
 }
 
