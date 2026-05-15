@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    id("com.google.devtools.ksp")
 }
 
 android {
@@ -71,14 +72,16 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.reorderable)
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    ksp(libs.room.compiler)
     implementation(libs.litert)
     implementation(libs.litert.support)
     implementation(libs.litert.metadata)
-    implementation("org.opencv:opencv:4.10.0")
-    implementation("androidx.appcompat:appcompat:1.7.0")
-    implementation("androidx.datastore:datastore-preferences:1.1.1")
-    implementation(libs.mlkit.`object`.detection)
-    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+    implementation(libs.opencv)
+    implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.pdfbox.android)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
