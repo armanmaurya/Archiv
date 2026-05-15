@@ -1,6 +1,8 @@
 [versions]
 agp = "9.2.1"
+appcompat = "1.7.0"
 coreKtx = "1.10.1"
+datastorePreferences = "1.1.1"
 junit = "4.13.2"
 junitVersion = "1.1.5"
 espressoCore = "3.5.1"
@@ -16,11 +18,18 @@ litert = "1.0.1"
 litertSupport = "1.0.1"
 litertMetadata = "1.0.1"
 mlkitObjectDetection = "17.0.2"
+opencv = "4.10.0"
+pdfboxAndroid = "2.0.27.0"
 reorderable = "2.4.0"
+roomCompiler = "2.8.4"
+roomRuntime = "2.8.4"
 tensorflowLiteSupport = "0.4.4"
 tensorflowLiteMetadata = "0.4.4"
 
 [libraries]
+androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "appcompat" }
+androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastorePreferences" }
+androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "roomRuntime" }
 litert = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "litert" }
 litert-support = { group = "com.google.ai.edge.litert", name = "litert-support", version.ref = "litertSupport" }
 litert-metadata = { group = "com.google.ai.edge.litert", name = "litert-metadata", version.ref = "litertMetadata" }
@@ -51,7 +60,10 @@ androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-te
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 mlkit-object-detection = { group = "com.google.mlkit", name = "object-detection", version.ref = "mlkitObjectDetection" }
 mlkit-object-detection-custom = { group = "com.google.mlkit", name = "object-detection-custom", version.ref = "mlkitObjectDetection" }
+opencv = { module = "org.opencv:opencv", version.ref = "opencv" }
+pdfbox-android = { module = "com.tom-roush:pdfbox-android", version.ref = "pdfboxAndroid" }
 reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
+room-compiler = { module = "androidx.room:room-compiler", version.ref = "roomCompiler" }
 tensorflow-lite-support = { group = "org.tensorflow", name = "tensorflow-lite-support", version.ref = "tensorflowLiteSupport" }
 tensorflow-lite-metadata = { group = "org.tensorflow", name = "tensorflow-lite-metadata", version.ref = "tensorflowLiteMetadata" }
 

@@ -11,12 +11,17 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.armanmaurya.archiv.data.repository.DocumentRepository
+import com.armanmaurya.archiv.data.repository.DocumentSort
 import com.armanmaurya.archiv.data.repository.SettingsRepository
 import com.armanmaurya.archiv.data.repository.dataStore
-import com.armanmaurya.archiv.domain.model.Document
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -27,8 +32,6 @@ class DocumentViewModel(
     private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
-    var documents by mutableStateOf<List<Document>>(emptyList())
-        private set
     var isLoading by mutableStateOf(false)
         private set
     var errorMessage by mutableStateOf<String?>(null)
@@ -44,24 +47,25 @@ class DocumentViewModel(
             initialValue = null
         )
 
-    init {
-        refreshDocuments()
-    }
+    // Search state
+    private val searchQuery = MutableStateFlow("")
+    val searchQueryState: StateFlow<String> = searchQuery.asStateFlow()
 
-    fun refreshDocuments() {
-        viewModelScope.launch {
-            isLoading = true
-            try {
-                documents = withContext(Dispatchers.IO) {
-                    repository.listDocuments()
-                }
-            } catch (error: IOException) {
-                errorMessage = error.message ?: "Unable to load documents."
-            } finally {
-                isLoading = false
-            }
-        }
-    }
+    // Search bar expanded state
+    private val isSearchExpanded = MutableStateFlow(false)
+    val isSearchExpandedState: StateFlow<Boolean> = isSearchExpanded.asStateFlow()
+
+    private val sortOption = MutableStateFlow(DocumentSort.MODIFIED_DESC)
+    val sortOptionState: StateFlow<DocumentSort> = sortOption.asStateFlow()
+
+    val documents = searchQuery
+        .combine(sortOption) { query, sort -> query to sort }
+        .flatMapLatest { (query, sort) -> repository.observeDocuments(query, sort) }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyList()
+        )
 
     fun createShareIntent(documentId: String): Intent? {
         return try {
@@ -72,6 +76,9 @@ class DocumentViewModel(
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
         } catch (error: IllegalArgumentException) {
+            errorMessage = error.message ?: "Unable to share this document."
+            null
+        } catch (error: IOException) {
             errorMessage = error.message ?: "Unable to share this document."
             null
         }
@@ -87,6 +94,15 @@ class DocumentViewModel(
         } catch (error: IllegalArgumentException) {
             errorMessage = error.message ?: "Unable to open this document."
             null
+        } catch (error: IOException) {
+            errorMessage = error.message ?: "Unable to open this document."
+            null
+        }
+    }
+
+    fun onDocumentOpened(documentId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.updateLastOpened(documentId)
         }
     }
 
@@ -115,7 +131,6 @@ class DocumentViewModel(
                 withContext(Dispatchers.IO) {
                     repository.deleteDocument(documentId)
                 }
-                documents = documents.filterNot { document -> document.id == documentId }
                 infoMessage = "Document deleted."
             } catch (error: IOException) {
                 errorMessage = error.message ?: "Unable to delete document."
@@ -133,6 +148,10 @@ class DocumentViewModel(
         errorMessage = "No PDF app found to open this document."
     }
 
+    fun setSearchExpanded(expanded: Boolean) {
+        isSearchExpanded.value = expanded
+    }
+
     fun consumeErrorMessage() {
         errorMessage = null
     }
@@ -145,6 +164,14 @@ class DocumentViewModel(
         viewModelScope.launch {
             settingsRepository.setDocumentListGridView(enabled)
         }
+    }
+
+    fun setSearchQuery(query: String) {
+        searchQuery.value = query
+    }
+
+    fun setSortOption(sort: DocumentSort) {
+        sortOption.value = sort
     }
 
     companion object {

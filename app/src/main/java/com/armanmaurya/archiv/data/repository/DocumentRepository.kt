@@ -10,6 +10,9 @@ import android.provider.MediaStore
 import androidx.annotation.RequiresApi
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
+import com.armanmaurya.archiv.data.local.ArchivDatabase
+import com.armanmaurya.archiv.data.local.mappers.toDomainDocument
+import com.armanmaurya.archiv.data.local.mappers.toDocumentEntity
 import com.armanmaurya.archiv.domain.model.Document
 import java.io.File
 import java.io.FileNotFoundException
@@ -18,16 +21,25 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+
+enum class DocumentSort {
+    MODIFIED_DESC,
+    NAME_ASC,
+    LAST_OPENED_DESC
+}
 
 class DocumentRepository(context: Context) {
 
     private val appContext = context.applicationContext
+    private val documentDao = ArchivDatabase.getInstance(appContext).documentDao()
 
-    fun savePdfToAppStorage(pdfBytes: ByteArray): File {
+    suspend fun savePdfToAppStorage(pdfBytes: ByteArray): File {
         return savePdfToAppStorage(pdfBytes, buildDefaultPdfName())
     }
 
-    fun savePdfToAppStorage(pdfBytes: ByteArray, desiredName: String): File {
+    suspend fun savePdfToAppStorage(pdfBytes: ByteArray, desiredName: String): File {
         if (pdfBytes.isEmpty()) {
             throw IOException("Generated PDF is empty.")
         }
@@ -44,11 +56,22 @@ class DocumentRepository(context: Context) {
             throw IOException("Saved PDF is empty.")
         }
 
+        val documentEntity = outputFile.toDocumentEntity(lastOpenedAtMillis = System.currentTimeMillis())
+        documentDao.upsert(documentEntity)
+
         return outputFile
     }
 
-    fun listDocuments(): List<Document> =
-        listAppPdfFiles().map { file -> file.toDocument() }
+    fun observeDocuments(searchQuery: String, sort: DocumentSort): Flow<List<Document>> {
+        val normalizedQuery = searchQuery.trim()
+        val query = if (normalizedQuery.isBlank()) "" else normalizedQuery
+        val source = when (sort) {
+            DocumentSort.MODIFIED_DESC -> documentDao.observeByModifiedDesc(query)
+            DocumentSort.NAME_ASC -> documentDao.observeByNameAsc(query)
+            DocumentSort.LAST_OPENED_DESC -> documentDao.observeByLastOpenedDesc(query)
+        }
+        return source.map { documents -> documents.map { it.toDomainDocument() } }
+    }
 
     fun getShareUri(documentId: String): Uri {
         val file = requireDocumentFile(documentId)
@@ -64,10 +87,15 @@ class DocumentRepository(context: Context) {
         return exportToDownloads(file)
     }
 
-    fun deleteDocument(documentId: String) {
+    suspend fun deleteDocument(documentId: String) {
         if (!deleteAppPdfFile(documentId)) {
             throw IOException("Unable to delete the selected document.")
         }
+        documentDao.deleteById(documentId)
+    }
+
+    suspend fun updateLastOpened(documentId: String) {
+        documentDao.updateLastOpened(documentId, System.currentTimeMillis())
     }
 
     fun listAppPdfFiles(): List<File> {
@@ -224,13 +252,4 @@ class DocumentRepository(context: Context) {
         }
     }
 
-    private fun File.toDocument(): Document {
-        return Document(
-            id = name,
-            fileName = name,
-            filePath = absolutePath,
-            fileSizeBytes = length(),
-            modifiedAtMillis = lastModified()
-        )
-    }
 }
