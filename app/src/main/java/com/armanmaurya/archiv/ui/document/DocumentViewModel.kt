@@ -11,14 +11,20 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.armanmaurya.archiv.data.repository.DocumentRepository
+import com.armanmaurya.archiv.data.repository.SettingsRepository
+import com.armanmaurya.archiv.data.repository.dataStore
 import com.armanmaurya.archiv.domain.model.Document
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class DocumentViewModel(
-    private val repository: DocumentRepository
+    private val repository: DocumentRepository,
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
     var documents by mutableStateOf<List<Document>>(emptyList())
@@ -29,6 +35,14 @@ class DocumentViewModel(
         private set
     var infoMessage by mutableStateOf<String?>(null)
         private set
+
+    val isDocumentListGridView = settingsRepository.documentListGridView
+        .map<Boolean, Boolean?> { it }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = null
+        )
 
     init {
         refreshDocuments()
@@ -127,11 +141,19 @@ class DocumentViewModel(
         infoMessage = null
     }
 
+    fun setDocumentListGridView(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setDocumentListGridView(enabled)
+        }
+    }
+
     companion object {
         fun factory(context: Context): ViewModelProvider.Factory = viewModelFactory {
             initializer {
+                val appContext = context.applicationContext
                 DocumentViewModel(
-                    repository = DocumentRepository(context.applicationContext)
+                    repository = DocumentRepository(appContext),
+                    settingsRepository = SettingsRepository(appContext.dataStore)
                 )
             }
         }

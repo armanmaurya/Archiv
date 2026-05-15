@@ -31,6 +31,9 @@ class SettingsRepository(
     val appLanguage: Flow<String> = dataStore
         .getOrDefault(key = APP_LANGUAGE, default = "System")
 
+    val documentListGridView: Flow<Boolean> = dataStore
+        .getOrDefault(key = DOCUMENT_LIST_GRID_VIEW, default = true)
+
     suspend fun setAppTheme(theme: String) {
         dataStore.setOrUpdate(key = APP_THEME, value = theme)
     }
@@ -47,11 +50,16 @@ class SettingsRepository(
         dataStore.setOrUpdate(key = APP_LANGUAGE, value = language)
     }
 
+    suspend fun setDocumentListGridView(enabled: Boolean) {
+        dataStore.setOrUpdate(key = DOCUMENT_LIST_GRID_VIEW, value = enabled)
+    }
+
     private companion object PreferencesKeys {
         val APP_THEME = stringPreferencesKey("app_theme")
         val PURE_BLACK = booleanPreferencesKey("pure_black")
         val DYNAMIC_THEME = booleanPreferencesKey("dynamic_theme")
         val APP_LANGUAGE = stringPreferencesKey("app_language")
+        val DOCUMENT_LIST_GRID_VIEW = booleanPreferencesKey("document_list_grid_view")
     }
 }
 
