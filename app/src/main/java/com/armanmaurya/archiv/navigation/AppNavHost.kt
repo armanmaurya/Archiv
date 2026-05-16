@@ -1,5 +1,6 @@
 package com.armanmaurya.archiv.navigation
 
+import android.net.Uri
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.slideInHorizontally
@@ -43,6 +44,8 @@ inline fun <reified T : ViewModel> NavBackStackEntry.sharedViewModel(
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun AppNavHost(
+    sharedUris: List<Uri> = emptyList(),
+    onSharedUrisProcessed: () -> Unit = {}
 ) {
     val navController = rememberNavController()
     val context = LocalContext.current
@@ -64,6 +67,8 @@ fun AppNavHost(
 
                 DocumentListScreen(
                     viewModel = documentViewModel,
+                    sharedUris = sharedUris,
+                    onSharedUrisProcessed = onSharedUrisProcessed,
                     onOpenScanner = {
                         navController.navigate(Screen.SCANNER_FLOW) {
                             launchSingleTop = true
