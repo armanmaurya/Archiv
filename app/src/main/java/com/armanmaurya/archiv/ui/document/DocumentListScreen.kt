@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -74,6 +75,8 @@ import com.armanmaurya.archiv.ui.document.components.DocumentItem
 @Composable
 fun DocumentListScreen(
     viewModel: DocumentViewModel,
+    sharedUris: List<Uri> = emptyList(),
+    onSharedUrisProcessed: () -> Unit = {},
     onOpenScanner: () -> Unit,
     onOpenSettings: () -> Unit,
     sharedTransitionScope: SharedTransitionScope? = null,
@@ -112,6 +115,13 @@ fun DocumentListScreen(
     ) { uris ->
         if (uris.isNotEmpty()) {
             viewModel.importDocuments(uris)
+        }
+    }
+
+    LaunchedEffect(sharedUris) {
+        if (sharedUris.isNotEmpty()) {
+            viewModel.importDocuments(sharedUris)
+            onSharedUrisProcessed()
         }
     }
 
