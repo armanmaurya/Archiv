@@ -2,6 +2,7 @@ package com.armanmaurya.archiv.ui.document
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -55,12 +56,23 @@ class DocumentViewModel(
     private val isSearchExpanded = MutableStateFlow(false)
     val isSearchExpandedState: StateFlow<Boolean> = isSearchExpanded.asStateFlow()
 
-    private val sortOption = MutableStateFlow(DocumentSort.MODIFIED_DESC)
+    private val sortOption = MutableStateFlow(DocumentSort.NAME_ASC)
     val sortOptionState: StateFlow<DocumentSort> = sortOption.asStateFlow()
+
+    private val selectedTags = MutableStateFlow<List<String>>(emptyList())
+    val selectedTagsState: StateFlow<List<String>> = selectedTags.asStateFlow()
+
+    val availableTags = repository.observeTagNames()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyList()
+        )
 
     val documents = searchQuery
         .combine(sortOption) { query, sort -> query to sort }
-        .flatMapLatest { (query, sort) -> repository.observeDocuments(query, sort) }
+        .combine(selectedTags) { (query, sort), tags -> Triple(query, sort, tags) }
+        .flatMapLatest { (query, sort, tags) -> repository.observeDocuments(query, sort, tags) }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
@@ -124,6 +136,38 @@ class DocumentViewModel(
         }
     }
 
+    fun importDocuments(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+
+        viewModelScope.launch {
+            isLoading = true
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    repository.importPdfDocuments(uris)
+                }
+                when {
+                    result.imported == 0 && result.failed > 0 -> {
+                        errorMessage = "Unable to import selected PDFs."
+                    }
+
+                    result.failed > 0 -> {
+                        infoMessage = "Imported ${'$'}{result.imported} PDFs, failed ${'$'}{result.failed}."
+                    }
+
+                    else -> {
+                        infoMessage = "Imported ${'$'}{result.imported} PDFs."
+                    }
+                }
+            } catch (error: SecurityException) {
+                errorMessage = error.message ?: "Storage permission is required to import."
+            } catch (error: IOException) {
+                errorMessage = error.message ?: "Unable to import selected PDFs."
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
     fun deleteDocument(documentId: String) {
         viewModelScope.launch {
             isLoading = true
@@ -134,6 +178,41 @@ class DocumentViewModel(
                 infoMessage = "Document deleted."
             } catch (error: IOException) {
                 errorMessage = error.message ?: "Unable to delete document."
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    fun updateDocumentTags(documentId: String, rawInput: String) {
+        viewModelScope.launch {
+            isLoading = true
+            try {
+                val tags = rawInput
+                    .split(",")
+                    .map { it.trim() }
+                withContext(Dispatchers.IO) {
+                    repository.updateDocumentTags(documentId, tags)
+                }
+                infoMessage = "Tags updated."
+            } catch (error: IOException) {
+                errorMessage = error.message ?: "Unable to update tags."
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    fun renameDocument(documentId: String, desiredName: String) {
+        viewModelScope.launch {
+            isLoading = true
+            try {
+                withContext(Dispatchers.IO) {
+                    repository.renameDocument(documentId, desiredName)
+                }
+                infoMessage = "Renamed document."
+            } catch (error: IOException) {
+                errorMessage = error.message ?: "Unable to rename document."
             } finally {
                 isLoading = false
             }
@@ -172,6 +251,20 @@ class DocumentViewModel(
 
     fun setSortOption(sort: DocumentSort) {
         sortOption.value = sort
+    }
+
+    fun toggleTagFilter(tag: String) {
+        val current = selectedTags.value.toMutableList()
+        if (current.contains(tag)) {
+            current.remove(tag)
+        } else {
+            current.add(tag)
+        }
+        selectedTags.value = current
+    }
+
+    fun clearTagFilters() {
+        selectedTags.value = emptyList()
     }
 
     companion object {

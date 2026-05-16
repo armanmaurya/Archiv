@@ -5,5 +5,6 @@ data class Document(
     val fileName: String,
     val filePath: String,
     val fileSizeBytes: Long,
-    val modifiedAtMillis: Long
+    val modifiedAtMillis: Long,
+    val tags: List<String> = emptyList()
 )

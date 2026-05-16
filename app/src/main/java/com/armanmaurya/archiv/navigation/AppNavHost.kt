@@ -73,7 +73,9 @@ fun AppNavHost(
                         navController.navigate(Screen.SETTINGS) {
                             launchSingleTop = true
                         }
-                    }
+                    },
+                    sharedTransitionScope = this@SharedTransitionLayout,
+                    animatedVisibilityScope = this
                 )
             }
 

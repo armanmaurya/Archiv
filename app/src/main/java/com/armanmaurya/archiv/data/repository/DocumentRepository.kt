@@ -7,12 +7,14 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import androidx.annotation.RequiresApi
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import com.armanmaurya.archiv.data.local.ArchivDatabase
 import com.armanmaurya.archiv.data.local.mappers.toDomainDocument
 import com.armanmaurya.archiv.data.local.mappers.toDocumentEntity
+import com.armanmaurya.archiv.data.local.entities.TagEntity
 import com.armanmaurya.archiv.domain.model.Document
 import java.io.File
 import java.io.FileNotFoundException
@@ -33,7 +35,10 @@ enum class DocumentSort {
 class DocumentRepository(context: Context) {
 
     private val appContext = context.applicationContext
-    private val documentDao = ArchivDatabase.getInstance(appContext).documentDao()
+    private val database = ArchivDatabase.getInstance(appContext)
+    private val documentDao = database.documentDao()
+    private val tagDao = database.tagDao()
+    private val documentTagDao = database.documentTagDao()
 
     suspend fun savePdfToAppStorage(pdfBytes: ByteArray): File {
         return savePdfToAppStorage(pdfBytes, buildDefaultPdfName())
@@ -62,15 +67,57 @@ class DocumentRepository(context: Context) {
         return outputFile
     }
 
-    fun observeDocuments(searchQuery: String, sort: DocumentSort): Flow<List<Document>> {
+    fun observeDocuments(
+        searchQuery: String,
+        sort: DocumentSort,
+        selectedTags: List<String> = emptyList()
+    ): Flow<List<Document>> {
         val normalizedQuery = searchQuery.trim()
         val query = if (normalizedQuery.isBlank()) "" else normalizedQuery
-        val source = when (sort) {
-            DocumentSort.MODIFIED_DESC -> documentDao.observeByModifiedDesc(query)
-            DocumentSort.NAME_ASC -> documentDao.observeByNameAsc(query)
-            DocumentSort.LAST_OPENED_DESC -> documentDao.observeByLastOpenedDesc(query)
+        val tags = normalizeTagNames(selectedTags)
+        val source = if (tags.isEmpty()) {
+            when (sort) {
+                DocumentSort.MODIFIED_DESC -> documentDao.observeByModifiedDesc(query)
+                DocumentSort.NAME_ASC -> documentDao.observeByNameAsc(query)
+                DocumentSort.LAST_OPENED_DESC -> documentDao.observeByLastOpenedDesc(query)
+            }
+        } else {
+            val tagCount = tags.size
+            when (sort) {
+                DocumentSort.MODIFIED_DESC -> documentDao.observeByModifiedDescWithTags(
+                    query = query,
+                    tags = tags,
+                    tagCount = tagCount
+                )
+                DocumentSort.NAME_ASC -> documentDao.observeByNameAscWithTags(
+                    query = query,
+                    tags = tags,
+                    tagCount = tagCount
+                )
+                DocumentSort.LAST_OPENED_DESC -> documentDao.observeByLastOpenedDescWithTags(
+                    query = query,
+                    tags = tags,
+                    tagCount = tagCount
+                )
+            }
         }
         return source.map { documents -> documents.map { it.toDomainDocument() } }
+    }
+
+    fun observeTagNames(): Flow<List<String>> {
+        return tagDao.observeAllNames()
+    }
+
+    suspend fun updateDocumentTags(documentId: String, rawTags: List<String>) {
+        val tags = normalizeTagNames(rawTags)
+        if (tags.isEmpty()) {
+            documentTagDao.replaceTags(documentId, emptyList())
+            return
+        }
+        tagDao.insertAll(tags.map { TagEntity(name = it) })
+        val storedTags = tagDao.getByNames(tags)
+        val tagIds = storedTags.map { it.id }
+        documentTagDao.replaceTags(documentId, tagIds)
     }
 
     fun getShareUri(documentId: String): Uri {
@@ -87,11 +134,80 @@ class DocumentRepository(context: Context) {
         return exportToDownloads(file)
     }
 
+    data class PdfImportResult(
+        val imported: Int,
+        val failed: Int
+    )
+
+    suspend fun importPdfDocuments(uris: List<Uri>): PdfImportResult {
+        var importedCount = 0
+        var failedCount = 0
+        for (uri in uris) {
+            val imported = runCatching { importSinglePdf(uri) }.isSuccess
+            if (imported) {
+                importedCount++
+            } else {
+                failedCount++
+            }
+        }
+        return PdfImportResult(imported = importedCount, failed = failedCount)
+    }
+
     suspend fun deleteDocument(documentId: String) {
         if (!deleteAppPdfFile(documentId)) {
             throw IOException("Unable to delete the selected document.")
         }
         documentDao.deleteById(documentId)
+    }
+
+    suspend fun renameDocument(oldDocumentId: String, desiredName: String): File {
+        val oldFile = resolveAppPdfFile(oldDocumentId)
+            ?: throw java.io.FileNotFoundException("Document not found.")
+
+        val outputDir = requireAppDocumentsDir()
+        val newFile = buildUniqueFile(outputDir, ensurePdfExtension(desiredName))
+
+        val moved = try {
+            oldFile.renameTo(newFile)
+        } catch (_: Exception) {
+            false
+        }
+
+        if (!moved) {
+            // fallback to copy & delete
+            try {
+                oldFile.inputStream().use { input ->
+                    FileOutputStream(newFile).use { out ->
+                        input.copyTo(out)
+                        out.flush()
+                    }
+                }
+                if (!oldFile.delete()) {
+                    // best effort: if delete fails, remove the new file to avoid duplicates
+                    newFile.delete()
+                    throw IOException("Unable to remove original file after copy.")
+                }
+            } catch (ex: Exception) {
+                if (newFile.exists()) newFile.delete()
+                throw IOException("Unable to rename document: ${ex.message}")
+            }
+        }
+
+        if (!newFile.exists() || !newFile.isFile) {
+            throw IOException("Renamed file is unavailable.")
+        }
+
+        // Insert new DB record and move tag links
+        val newEntity = newFile.toDocumentEntity(lastOpenedAtMillis = null)
+        documentDao.upsert(newEntity)
+        try {
+            documentTagDao.updateDocumentId(oldDocumentId, newEntity.id)
+        } catch (_: Exception) {
+            // ignore, best-effort
+        }
+        documentDao.deleteById(oldDocumentId)
+
+        return newFile
     }
 
     suspend fun updateLastOpened(documentId: String) {
@@ -146,6 +262,41 @@ class DocumentRepository(context: Context) {
             ?: throw FileNotFoundException("Document not found.")
     }
 
+    private suspend fun importSinglePdf(uri: Uri) {
+        val resolver = appContext.contentResolver
+        val displayName = getDisplayName(resolver, uri) ?: uri.lastPathSegment
+        val desiredName = displayName ?: buildDefaultPdfName()
+        val outputDir = requireAppDocumentsDir()
+        val outputFile = buildUniqueFile(outputDir, ensurePdfExtension(desiredName))
+
+        resolver.openInputStream(uri)?.use { inputStream ->
+            FileOutputStream(outputFile).use { outputStream ->
+                inputStream.copyTo(outputStream)
+                outputStream.flush()
+            }
+        } ?: throw IOException("Unable to read selected PDF.")
+
+        if (outputFile.length() == 0L) {
+            outputFile.delete()
+            throw IOException("Imported PDF is empty.")
+        }
+
+        val documentEntity = outputFile.toDocumentEntity(lastOpenedAtMillis = System.currentTimeMillis())
+        documentDao.upsert(documentEntity)
+    }
+
+    private fun getDisplayName(resolver: android.content.ContentResolver, uri: Uri): String? {
+        return resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor ->
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index >= 0 && cursor.moveToFirst()) {
+                    cursor.getString(index)
+                } else {
+                    null
+                }
+            }
+    }
+
     private fun requireAppDocumentsDir(): File {
         val outputDir = appContext.getExternalFilesDir("documents")
             ?: throw IOException("App documents directory is unavailable.")
@@ -153,6 +304,18 @@ class DocumentRepository(context: Context) {
             throw IOException("Unable to create app documents directory.")
         }
         return outputDir
+    }
+
+    private fun normalizeTagNames(rawTags: List<String>): List<String> {
+        if (rawTags.isEmpty()) return emptyList()
+        val seen = LinkedHashSet<String>()
+        rawTags.forEach { tag ->
+            val normalized = tag.trim().lowercase(Locale.ROOT)
+            if (normalized.isNotEmpty()) {
+                seen.add(normalized)
+            }
+        }
+        return seen.toList()
     }
 
     @RequiresApi(Build.VERSION_CODES.Q)

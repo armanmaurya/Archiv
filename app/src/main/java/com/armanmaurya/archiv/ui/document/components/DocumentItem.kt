@@ -5,6 +5,7 @@ import android.graphics.fonts.Font
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,11 +22,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.GetApp
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +49,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.spring
+import androidx.compose.ui.res.stringResource
+import com.armanmaurya.archiv.R
 import com.armanmaurya.archiv.domain.model.Document
 import java.io.File
 import java.io.IOException
@@ -63,6 +70,10 @@ fun DocumentItem(
     onShare: () -> Unit,
     onExport: () -> Unit,
     onDelete: () -> Unit,
+    onEditTags: () -> Unit,
+    onRename: () -> Unit = {},
+    onTagClick: (String) -> Unit = {},
+    selectedTags: List<String> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     ElevatedCard(
@@ -104,6 +115,13 @@ fun DocumentItem(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    TagRow(
+                        tags = document.tags,
+                        maxVisible = 2,
+                        onTagClick = onTagClick,
+                        selectedTags = selectedTags,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -134,6 +152,11 @@ fun DocumentItem(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                        TagOverflowMenu(
+                            onEditTags = onEditTags,
+                            onRename = onRename,
+                            enabled = actionEnabled
+                        )
                     }
                 }
             }
@@ -168,6 +191,13 @@ fun DocumentItem(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    TagRow(
+                        tags = document.tags,
+                        maxVisible = 3,
+                        onTagClick = onTagClick,
+                        selectedTags = selectedTags,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                         horizontalArrangement = Arrangement.Start
@@ -196,9 +226,124 @@ fun DocumentItem(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                        TagOverflowMenu(
+                            onEditTags = onEditTags,
+                            onRename = onRename,
+                            enabled = actionEnabled
+                        )
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun TagRow(
+    tags: List<String>,
+    maxVisible: Int,
+    onTagClick: (String) -> Unit = {},
+    selectedTags: List<String> = emptyList(),
+    modifier: Modifier = Modifier
+) {
+    if (tags.isEmpty()) return
+    val visibleTags = tags.take(maxVisible)
+    val hiddenCount = tags.size - visibleTags.size
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        visibleTags.forEach { tag ->
+            TagChip(
+                label = tag,
+                onClick = { onTagClick(tag) },
+                isSelected = tag in selectedTags
+            )
+        }
+        if (hiddenCount > 0) {
+            TagChip(label = "+$hiddenCount")
+        }
+    }
+}
+
+@Composable
+private fun TagChip(
+    label: String,
+    onClick: () -> Unit = {},
+    isSelected: Boolean = false
+) {
+    if (isSelected) {
+        Surface(
+            color = MaterialTheme.colorScheme.primary,
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.clickable(onClick = onClick)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    } else {
+        Surface(
+            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f),
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier
+                .clickable(onClick = onClick)
+                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun TagOverflowMenu(
+    onEditTags: () -> Unit,
+    onRename: () -> Unit = {},
+    enabled: Boolean
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(
+            onClick = { menuExpanded = true },
+            enabled = enabled
+        ) {
+            Icon(
+                Icons.Filled.MoreVert,
+                contentDescription = stringResource(R.string.document_tags_more_actions),
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        DropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.document_tags_title)) },
+                onClick = {
+                    menuExpanded = false
+                    onEditTags()
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Rename") },
+                onClick = {
+                    menuExpanded = false
+                    onRename()
+                }
+            )
         }
     }
 }
