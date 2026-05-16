@@ -180,6 +180,16 @@ fun ScannerScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val sharedShutterModifier = if (sharedTransitionScope != null && animatedVisibilityScope != null) {
+                with(sharedTransitionScope) {
+                    Modifier.sharedElement(
+                        state = rememberSharedContentState("scan_button"),
+                        animatedVisibilityScope = animatedVisibilityScope
+                    )
+                }
+            } else {
+                Modifier
+            }
             GalleryButton(
                 onImagesSelected = { uris ->
                     isImportBusy = true
@@ -231,7 +241,8 @@ fun ScannerScreen(
 
             ShutterButton(
                 onCapture = { captureRequestKey++ },
-                enabled = !isScreenBusy
+                enabled = !isScreenBusy,
+                modifier = sharedShutterModifier
             )
 
             AutoEdgeDetectionButton(
