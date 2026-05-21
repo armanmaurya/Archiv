@@ -10,11 +10,11 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.automirrored.outlined.ViewList
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -168,14 +168,13 @@ fun ArchivSearchBar(
                 if (!isExpanded && isGridView != null) {
                     Box {
                         IconButton(onClick = { isSortMenuExpanded = true }) {
-                            Icon(Icons.Outlined.Sort, contentDescription = "Sort")
+                            Icon(Icons.AutoMirrored.Outlined.Sort, contentDescription = "Sort")
                         }
                         DropdownMenu(
                             expanded = isSortMenuExpanded,
                             onDismissRequest = { isSortMenuExpanded = false }
                         ) {
                             DocumentSort.values()
-                                .filter { it != DocumentSort.MODIFIED_DESC }
                                 .forEach { option ->
                                     DropdownMenuItem(
                                         text = { Text(option.displayLabel()) },
@@ -205,4 +204,5 @@ private fun DocumentSort.displayLabel() = when (this) {
     DocumentSort.MODIFIED_DESC -> "Recently modified"
     DocumentSort.NAME_ASC -> "Name (A to Z)"
     DocumentSort.LAST_OPENED_DESC -> "Recently opened"
+    DocumentSort.SIZE_DESC -> "Size"
 }

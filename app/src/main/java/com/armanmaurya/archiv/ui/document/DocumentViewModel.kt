@@ -56,8 +56,19 @@ class DocumentViewModel(
     private val isSearchExpanded = MutableStateFlow(false)
     val isSearchExpandedState: StateFlow<Boolean> = isSearchExpanded.asStateFlow()
 
-    private val sortOption = MutableStateFlow(DocumentSort.NAME_ASC)
-    val sortOptionState: StateFlow<DocumentSort> = sortOption.asStateFlow()
+    val sortOptionState: StateFlow<DocumentSort> = settingsRepository.documentSort
+        .map {
+            try {
+                DocumentSort.valueOf(it)
+            } catch (_: Exception) {
+                DocumentSort.NAME_ASC
+            }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = DocumentSort.NAME_ASC
+        )
 
     private val selectedTags = MutableStateFlow<List<String>>(emptyList())
     val selectedTagsState: StateFlow<List<String>> = selectedTags.asStateFlow()
@@ -69,8 +80,9 @@ class DocumentViewModel(
             initialValue = emptyList()
         )
 
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val documents = searchQuery
-        .combine(sortOption) { query, sort -> query to sort }
+        .combine(sortOptionState) { query, sort -> query to sort }
         .combine(selectedTags) { (query, sort), tags -> Triple(query, sort, tags) }
         .flatMapLatest { (query, sort, tags) -> repository.observeDocuments(query, sort, tags) }
         .stateIn(
@@ -247,7 +259,9 @@ class DocumentViewModel(
     }
 
     fun setSortOption(sort: DocumentSort) {
-        sortOption.value = sort
+        viewModelScope.launch {
+            settingsRepository.setDocumentSort(sort.name)
+        }
     }
 
     fun toggleTagFilter(tag: String) {

@@ -34,6 +34,9 @@ class SettingsRepository(
     val documentListGridView: Flow<Boolean> = dataStore
         .getOrDefault(key = DOCUMENT_LIST_GRID_VIEW, default = true)
 
+    val documentSort: Flow<String> = dataStore
+        .getOrDefault(key = DOCUMENT_SORT, default = "NAME_ASC")
+
     suspend fun setAppTheme(theme: String) {
         dataStore.setOrUpdate(key = APP_THEME, value = theme)
     }
@@ -54,12 +57,17 @@ class SettingsRepository(
         dataStore.setOrUpdate(key = DOCUMENT_LIST_GRID_VIEW, value = enabled)
     }
 
+    suspend fun setDocumentSort(sort: String) {
+        dataStore.setOrUpdate(key = DOCUMENT_SORT, value = sort)
+    }
+
     private companion object PreferencesKeys {
         val APP_THEME = stringPreferencesKey("app_theme")
         val PURE_BLACK = booleanPreferencesKey("pure_black")
         val DYNAMIC_THEME = booleanPreferencesKey("dynamic_theme")
         val APP_LANGUAGE = stringPreferencesKey("app_language")
         val DOCUMENT_LIST_GRID_VIEW = booleanPreferencesKey("document_list_grid_view")
+        val DOCUMENT_SORT = stringPreferencesKey("document_sort")
     }
 }
 
