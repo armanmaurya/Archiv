@@ -18,4 +18,7 @@ interface TagDao {
 
     @Query("SELECT name FROM tags ORDER BY name COLLATE NOCASE ASC")
     fun observeAllNames(): Flow<List<String>>
+
+    @Query("DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tagId FROM document_tags)")
+    suspend fun deleteOrphanedTags()
 }

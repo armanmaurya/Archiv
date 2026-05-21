@@ -197,7 +197,7 @@ fun EditorPage(
                 if (sharedTransitionScope != null && animatedVisibilityScope != null) {
                     with(sharedTransitionScope) {
                         Modifier.sharedElement(
-                            state = rememberSharedContentState(sharedElementKeyForUri(uri)),
+                            sharedContentState = rememberSharedContentState(sharedElementKeyForUri(uri)),
                             animatedVisibilityScope = animatedVisibilityScope
                         )
                     }

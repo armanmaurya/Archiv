@@ -183,7 +183,7 @@ fun ScannerScreen(
             val sharedShutterModifier = if (sharedTransitionScope != null && animatedVisibilityScope != null) {
                 with(sharedTransitionScope) {
                     Modifier.sharedElement(
-                        state = rememberSharedContentState("scan_button"),
+                        sharedContentState = rememberSharedContentState("scan_button"),
                         animatedVisibilityScope = animatedVisibilityScope
                     )
                 }
