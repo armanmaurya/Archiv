@@ -21,10 +21,11 @@ with fast search speed, tagging, importing and sharing directly.
 ## Screenshots
 
 <div align="center">
+  <img width="23%" src="screenshots/screenshot_4.jpg" alt="Settings Screen">
   <img width="23%" src="screenshots/screenshot_1.jpg" alt="Documents Screen">
   <img width="23%" src="screenshots/screenshot_2.jpg" alt="Scanner Screen">
   <img width="23%" src="screenshots/screenshot_3.jpg" alt="Editor Screen">
-  <img width="23%" src="screenshots/screenshot_4.jpg" alt="Settings Screen">
+  
 </div>
 
 ## Tech Stack
