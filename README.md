@@ -27,7 +27,6 @@ with fast search speed, tagging, importing and sharing directly.
   <img width="23%" src="screenshots/screenshot_1.jpg" alt="Documents Screen">
   <img width="23%" src="screenshots/screenshot_2.jpg" alt="Scanner Screen">
   <img width="23%" src="screenshots/screenshot_3.jpg" alt="Editor Screen">
-  
 </div>
 
 ## Tech Stack

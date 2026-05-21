@@ -93,6 +93,33 @@ interface DocumentDao {
         tagCount: Int
     ): Flow<List<DocumentWithTags>>
 
+    @Transaction
+    @Query(
+        "SELECT * FROM documents " +
+            "WHERE fileName LIKE '%' || :query || '%' " +
+            "ORDER BY fileSizeBytes DESC"
+    )
+    fun observeBySizeDesc(query: String): Flow<List<DocumentWithTags>>
+
+    @Transaction
+    @Query(
+        "SELECT * FROM documents " +
+            "WHERE fileName LIKE '%' || :query || '%' " +
+            "AND id IN (" +
+            "SELECT documentId FROM document_tags " +
+            "INNER JOIN tags ON tags.id = document_tags.tagId " +
+            "WHERE tags.name IN (:tags) " +
+            "GROUP BY documentId " +
+            "HAVING COUNT(DISTINCT tags.name) = :tagCount" +
+            ") " +
+            "ORDER BY fileSizeBytes DESC"
+    )
+    fun observeBySizeDescWithTags(
+        query: String,
+        tags: List<String>,
+        tagCount: Int
+    ): Flow<List<DocumentWithTags>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(document: DocumentEntity)
 
