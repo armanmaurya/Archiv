@@ -184,13 +184,10 @@ class DocumentViewModel(
         }
     }
 
-    fun updateDocumentTags(documentId: String, rawInput: String) {
+    fun updateDocumentTags(documentId: String, tags: List<String>) {
         viewModelScope.launch {
             isLoading = true
             try {
-                val tags = rawInput
-                    .split(",")
-                    .map { it.trim() }
                 withContext(Dispatchers.IO) {
                     repository.updateDocumentTags(documentId, tags)
                 }

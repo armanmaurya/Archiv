@@ -24,7 +24,7 @@ import androidx.navigation.navArgument
 import com.armanmaurya.archiv.ui.scanner.ScannerScreen
 import com.armanmaurya.archiv.ui.scanner.ScannerViewModel
 import com.armanmaurya.archiv.ui.scanner.EditorScreen
-import com.armanmaurya.archiv.ui.document.DocumentListScreen
+import com.armanmaurya.archiv.ui.document.DocumentsScreen
 import com.armanmaurya.archiv.ui.document.DocumentViewModel
 import com.armanmaurya.archiv.ui.settings.AboutScreen
 import com.armanmaurya.archiv.ui.settings.SettingsScreen
@@ -65,7 +65,7 @@ fun AppNavHost(
                     factory = DocumentViewModel.factory(context)
                 )
 
-                DocumentListScreen(
+                DocumentsScreen(
                     viewModel = documentViewModel,
                     sharedUris = sharedUris,
                     onSharedUrisProcessed = onSharedUrisProcessed,

@@ -112,12 +112,14 @@ class DocumentRepository(context: Context) {
         val tags = normalizeTagNames(rawTags)
         if (tags.isEmpty()) {
             documentTagDao.replaceTags(documentId, emptyList())
+            tagDao.deleteOrphanedTags()
             return
         }
         tagDao.insertAll(tags.map { TagEntity(name = it) })
         val storedTags = tagDao.getByNames(tags)
         val tagIds = storedTags.map { it.id }
         documentTagDao.replaceTags(documentId, tagIds)
+        tagDao.deleteOrphanedTags()
     }
 
     fun getShareUri(documentId: String): Uri {
@@ -158,6 +160,7 @@ class DocumentRepository(context: Context) {
             throw IOException("Unable to delete the selected document.")
         }
         documentDao.deleteById(documentId)
+        tagDao.deleteOrphanedTags()
     }
 
     suspend fun renameDocument(oldDocumentId: String, desiredName: String): File {
@@ -310,7 +313,7 @@ class DocumentRepository(context: Context) {
         if (rawTags.isEmpty()) return emptyList()
         val seen = LinkedHashSet<String>()
         rawTags.forEach { tag ->
-            val normalized = tag.trim().lowercase(Locale.ROOT)
+            val normalized = tag.trim()
             if (normalized.isNotEmpty()) {
                 seen.add(normalized)
             }

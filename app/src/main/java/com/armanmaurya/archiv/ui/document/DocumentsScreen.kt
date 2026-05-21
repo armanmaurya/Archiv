@@ -28,21 +28,14 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -58,22 +51,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.armanmaurya.archiv.R
 import com.armanmaurya.archiv.domain.model.Document
 import com.armanmaurya.archiv.ui.document.components.ArchivSearchBar
-import com.armanmaurya.archiv.ui.document.components.TagStrip
 import com.armanmaurya.archiv.ui.document.components.DocumentItem
+import com.armanmaurya.archiv.ui.document.components.Fab
+import com.armanmaurya.archiv.ui.document.components.RenameSheet
+import com.armanmaurya.archiv.ui.document.components.TagEditorDialog
+import com.armanmaurya.archiv.ui.document.components.TagStrip
 
 @OptIn(
     ExperimentalFoundationApi::class,
     ExperimentalMaterial3Api::class,
-    ExperimentalSharedTransitionApi::class
+    ExperimentalSharedTransitionApi::class,
+    ExperimentalLayoutApi::class
 )
 @Composable
-fun DocumentListScreen(
+fun DocumentsScreen(
     viewModel: DocumentViewModel,
     sharedUris: List<Uri> = emptyList(),
     onSharedUrisProcessed: () -> Unit = {},
@@ -95,8 +91,6 @@ fun DocumentListScreen(
     var pendingExportDocumentId by remember { mutableStateOf<String?>(null) }
     var pendingTagDocument by remember { mutableStateOf<Document?>(null) }
     var pendingRenameDocument by remember { mutableStateOf<Document?>(null) }
-    var tagInput by remember { mutableStateOf("") }
-    var renameInput by remember { mutableStateOf("") }
 
     val exportPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -141,48 +135,12 @@ fun DocumentListScreen(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
-            val sharedFabModifier = if (sharedTransitionScope != null && animatedVisibilityScope != null) {
-                with(sharedTransitionScope) {
-                    Modifier.sharedElement(
-                        state = rememberSharedContentState("scan_button"),
-                        animatedVisibilityScope = animatedVisibilityScope
-                    )
-                }
-            } else {
-                Modifier
-            }
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalAlignment = Alignment.End
-            ) {
-                SmallFloatingActionButton(
-                    onClick = { importPdfLauncher.launch(arrayOf("application/pdf")) },
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.PictureAsPdf,
-                        contentDescription = stringResource(R.string.document_list_fab_import_pdf)
-                    )
-                }
-                ExtendedFloatingActionButton(
-                    onClick = onOpenScanner,
-                    modifier = sharedFabModifier,
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Filled.CameraAlt,
-                            contentDescription = null
-                        )
-                    },
-                    text = {
-                        Text(
-                            text = stringResource(R.string.document_list_fab_scan),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                )
-            }
+            Fab(
+                onImportPdf = { importPdfLauncher.launch(arrayOf("application/pdf")) },
+                onOpenScanner = onOpenScanner,
+                sharedTransitionScope = sharedTransitionScope,
+                animatedVisibilityScope = animatedVisibilityScope
+            )
         },
         topBar = {
             WindowInsets(0)
@@ -249,8 +207,10 @@ fun DocumentListScreen(
                                     modifier = Modifier
                                         .fillMaxSize(),
                                     contentPadding = PaddingValues(
-                                        horizontal = 12.dp,
-                                        vertical = 8.dp
+                                        start = 12.dp,
+                                        end = 12.dp,
+                                        top = 8.dp,
+                                        bottom = 88.dp
                                     ),
                                     verticalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
@@ -306,13 +266,9 @@ fun DocumentListScreen(
                                             onDelete = { pendingDeleteDocumentId = document.id },
                                             onEditTags = {
                                                 pendingTagDocument = document
-                                                tagInput = document.tags.joinToString(", ")
                                             },
                                             onRename = {
                                                 pendingRenameDocument = document
-                                                renameInput = if (document.fileName.endsWith(".pdf", true)) {
-                                                    document.fileName.dropLast(4)
-                                                } else document.fileName
                                             },
                                             onTagClick = { tag -> viewModel.toggleTagFilter(tag) },
                                             selectedTags = selectedTags,
@@ -327,7 +283,7 @@ fun DocumentListScreen(
                                     columns = GridCells.Adaptive(minSize = 180.dp),
                                     modifier = Modifier
                                         .fillMaxSize(),
-                                    contentPadding = PaddingValues(horizontal = 12.dp),
+                                    contentPadding = PaddingValues(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 108.dp),
                                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                                     verticalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
@@ -384,13 +340,9 @@ fun DocumentListScreen(
                                             onDelete = { pendingDeleteDocumentId = document.id },
                                             onEditTags = {
                                                 pendingTagDocument = document
-                                                tagInput = document.tags.joinToString(", ")
                                             },
                                             onRename = {
                                                 pendingRenameDocument = document
-                                                renameInput = if (document.fileName.endsWith(".pdf", true)) {
-                                                    document.fileName.dropLast(4)
-                                                } else document.fileName
                                             },
                                             onTagClick = { tag -> viewModel.toggleTagFilter(tag) },
                                             selectedTags = selectedTags,
@@ -433,70 +385,28 @@ fun DocumentListScreen(
     }
 
     pendingTagDocument?.let { document ->
-        AlertDialog(
+        TagEditorDialog(
+            initialTags = document.tags,
+            availableTags = availableTags,
             onDismissRequest = { pendingTagDocument = null },
-            title = { Text(stringResource(R.string.document_tags_title)) },
-            text = {
-                OutlinedTextField(
-                    value = tagInput,
-                    onValueChange = { tagInput = it },
-                    label = { Text(stringResource(R.string.document_tags_label)) },
-                    placeholder = { Text(stringResource(R.string.document_tags_placeholder)) },
-                    singleLine = false
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.updateDocumentTags(document.id, tagInput)
-                        pendingTagDocument = null
-                    }
-                ) {
-                    Text(stringResource(R.string.document_tags_save))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingTagDocument = null }) {
-                    Text(stringResource(R.string.document_tags_cancel))
-                }
+            onSaveTags = { tags ->
+                viewModel.updateDocumentTags(document.id, tags)
+                pendingTagDocument = null
             }
         )
     }
 
-    if (pendingRenameDocument != null) {
-        val document = pendingRenameDocument!!
-        val sheetState = androidx.compose.material3.rememberModalBottomSheetState()
-        androidx.compose.material3.ModalBottomSheet(
+    pendingRenameDocument?.let { document ->
+        RenameSheet(
+            initialName = if (document.fileName.endsWith(".pdf", true)) {
+                document.fileName.dropLast(4)
+            } else document.fileName,
             onDismissRequest = { pendingRenameDocument = null },
-            sheetState = sheetState
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(text = stringResource(R.string.document_rename_title), style = MaterialTheme.typography.titleMedium)
-                OutlinedTextField(
-                    value = renameInput,
-                    onValueChange = { renameInput = it },
-                    label = { Text(stringResource(R.string.document_rename_label)) },
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
-                )
-                Row(
-                    horizontalArrangement = Arrangement.End,
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
-                ) {
-                    TextButton(onClick = { pendingRenameDocument = null }) {
-                        Text(stringResource(R.string.document_rename_cancel))
-                    }
-            TextButton(onClick = {
-                        val desired = renameInput
-                        pendingRenameDocument = null
-                        if (desired.isNotBlank()) {
-                            viewModel.renameDocument(document.id, desired)
-                        }
-                    }) {
-                        Text(stringResource(R.string.document_rename_save))
-                    }
-                }
+            onRename = { desired ->
+                viewModel.renameDocument(document.id, desired)
+                pendingRenameDocument = null
             }
-        }
+        )
     }
 }
 
