@@ -20,9 +20,12 @@ with fast search speed, tagging, importing and sharing directly.
 
 ## Screenshots
 
-| Documents Screen | Scanner Screen | Editor Screen |
-|:---:|:---:|:---:|
-| *Placeholder for Screenshot 1* | *Placeholder for Screenshot 2* | *Placeholder for Screenshot 3* |
+<div align="center">
+  <img width="23%" src="screenshots/screenshot_1.jpg" alt="Documents Screen">
+  <img width="23%" src="screenshots/screenshot_2.jpg" alt="Scanner Screen">
+  <img width="23%" src="screenshots/screenshot_3.jpg" alt="Editor Screen">
+  <img width="23%" src="screenshots/screenshot_4.jpg" alt="Settings Screen">
+</div>
 
 ## Tech Stack
 
