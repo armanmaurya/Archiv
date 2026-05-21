@@ -13,3 +13,7 @@
 .externalNativeBuild
 .cxx
 local.properties
+.kotlin
+.vscode
+build.log
+build2.log
