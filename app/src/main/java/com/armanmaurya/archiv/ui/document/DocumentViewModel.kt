@@ -61,13 +61,13 @@ class DocumentViewModel(
             try {
                 DocumentSort.valueOf(it)
             } catch (_: Exception) {
-                DocumentSort.NAME_ASC
+                DocumentSort.RECENT
             }
         }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.Eagerly,
-            initialValue = DocumentSort.NAME_ASC
+            initialValue = DocumentSort.RECENT
         )
 
     private val selectedTags = MutableStateFlow<List<String>>(emptyList())

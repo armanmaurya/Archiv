@@ -21,6 +21,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navigation
 import androidx.navigation.navArgument
+import com.armanmaurya.archiv.SharedIntent
 import com.armanmaurya.archiv.ui.scanner.ScannerScreen
 import com.armanmaurya.archiv.ui.scanner.ScannerViewModel
 import com.armanmaurya.archiv.ui.scanner.EditorScreen
@@ -44,12 +45,13 @@ inline fun <reified T : ViewModel> NavBackStackEntry.sharedViewModel(
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun AppNavHost(
-    sharedUris: List<Uri> = emptyList(),
-    onSharedUrisProcessed: () -> Unit = {}
+    sharedIntent: SharedIntent = SharedIntent.None,
+    onSharedIntentProcessed: () -> Unit = {}
 ) {
     val navController = rememberNavController()
     val context = LocalContext.current
     var scrollToIndexHint by remember { mutableStateOf<Int?>(null) }
+    var sharedImages by remember { mutableStateOf<List<Uri>>(emptyList()) }
 
     SharedTransitionLayout {
         NavHost(navController = navController, startDestination = Screen.DOCUMENTS) {
@@ -67,9 +69,12 @@ fun AppNavHost(
 
                 DocumentsScreen(
                     viewModel = documentViewModel,
-                    sharedUris = sharedUris,
-                    onSharedUrisProcessed = onSharedUrisProcessed,
-                    onOpenScanner = {
+                    sharedIntent = sharedIntent,
+                    onSharedIntentProcessed = onSharedIntentProcessed,
+                    onOpenScanner = { initialImages ->
+                        if (initialImages.isNotEmpty()) {
+                            sharedImages = initialImages
+                        }
                         navController.navigate(Screen.SCANNER_FLOW) {
                             launchSingleTop = true
                         }
@@ -114,6 +119,8 @@ fun AppNavHost(
 
                     ScannerScreen(
                         viewModel = viewModel,
+                        sharedImages = sharedImages,
+                        onSharedImagesProcessed = { sharedImages = emptyList() },
                         onOpenEditor = { startIndex ->
                             navController.navigate(Screen.editorRoute(startIndex))
                         },

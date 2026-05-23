@@ -201,8 +201,7 @@ fun ArchivSearchBar(
 }
 
 private fun DocumentSort.displayLabel() = when (this) {
-    DocumentSort.MODIFIED_DESC -> "Recently modified"
+    DocumentSort.RECENT -> "Recent"
     DocumentSort.NAME_ASC -> "Name (A to Z)"
-    DocumentSort.LAST_OPENED_DESC -> "Recently opened"
     DocumentSort.SIZE_DESC -> "Size"
 }

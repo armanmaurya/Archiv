@@ -66,6 +66,8 @@ import kotlinx.coroutines.withContext
 @Composable
 fun ScannerScreen(
         viewModel: ScannerViewModel,
+        sharedImages: List<Uri> = emptyList(),
+        onSharedImagesProcessed: () -> Unit = {},
         onOpenEditor: (Int) -> Unit,
     onExitScanner: () -> Unit,
     onOpenDocumentList: () -> Unit,
@@ -96,6 +98,60 @@ fun ScannerScreen(
 
     val pendingSavedDocumentId = viewModel.pendingSavedDocumentId
     var navigatedToDocumentListAfterSave by remember { mutableStateOf(false) }
+
+    fun handleImageImport(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        isImportBusy = true
+        coroutineScope.launch {
+            val copiedUris = withContext(Dispatchers.IO) {
+                uris.mapNotNull { uri -> copyUriToCache(context, uri) }
+            }
+
+            // Perform edge detection on each imported image if enabled
+            if (isAutoEdgeDetectionEnabled && copiedUris.isNotEmpty()) {
+                val detector = withContext(Dispatchers.Default) {
+                    val runner = DocCornerTFLiteRunner.getInstance(context, DocCornerDetector.DEFAULT_MODEL_ASSET_PATH)
+                    DocCornerDetector(runner)
+                }
+
+                copiedUris.forEach { uri ->
+                    var detectedBounds: List<android.graphics.PointF>? = null
+                    withContext(Dispatchers.Default) {
+                        decodeSampledBitmap(context, uri)?.let { bitmap ->
+                            try {
+                                val result = detector.detect(bitmap, context, false)
+                                if (result.success && result.cornersOriginalTLTRBRBL != null) {
+                                    detectedBounds = result.cornersOriginalTLTRBRBL.map {
+                                        android.graphics.PointF(
+                                            (it[0] / bitmap.width).toFloat(),
+                                            (it[1] / bitmap.height).toFloat()
+                                        )
+                                    }
+                                }
+                            } finally {
+                                bitmap.recycle()
+                            }
+                        }
+                    }
+                    viewModel.addPage(uri, detectedBounds)
+                }
+            } else {
+                copiedUris.forEach { uri -> viewModel.addPage(uri) }
+            }
+
+            if (copiedUris.isEmpty()) {
+                scannerErrorMessage = "Unable to import selected images."
+            }
+            isImportBusy = false
+        }
+    }
+
+    LaunchedEffect(sharedImages) {
+        if (sharedImages.isNotEmpty()) {
+            handleImageImport(sharedImages)
+            onSharedImagesProcessed()
+        }
+    }
 
     LaunchedEffect(pendingSavedDocumentId) {
         if (pendingSavedDocumentId != null) {
@@ -191,51 +247,7 @@ fun ScannerScreen(
                 Modifier
             }
             GalleryButton(
-                onImagesSelected = { uris ->
-                    isImportBusy = true
-                    coroutineScope.launch {
-                        val copiedUris = withContext(Dispatchers.IO) {
-                            uris.mapNotNull { uri -> copyUriToCache(context, uri) }
-                        }
-
-                        // Perform edge detection on each imported image if enabled
-                        if (isAutoEdgeDetectionEnabled && copiedUris.isNotEmpty()) {
-                            val detector = withContext(Dispatchers.Default) {
-                                val runner = DocCornerTFLiteRunner.getInstance(context, DocCornerDetector.DEFAULT_MODEL_ASSET_PATH)
-                                DocCornerDetector(runner)
-                            }
-
-                            copiedUris.forEach { uri ->
-                                var detectedBounds: List<android.graphics.PointF>? = null
-                                withContext(Dispatchers.Default) {
-                                    decodeSampledBitmap(context, uri)?.let { bitmap ->
-                                        try {
-                                            val result = detector.detect(bitmap, context, false)
-                                            if (result.success && result.cornersOriginalTLTRBRBL != null) {
-                                                detectedBounds = result.cornersOriginalTLTRBRBL.map {
-                                                    android.graphics.PointF(
-                                                        (it[0] / bitmap.width).toFloat(),
-                                                        (it[1] / bitmap.height).toFloat()
-                                                    )
-                                                }
-                                            }
-                                        } finally {
-                                            bitmap.recycle()
-                                        }
-                                    }
-                                }
-                                viewModel.addPage(uri, detectedBounds)
-                            }
-                        } else {
-                            copiedUris.forEach { uri -> viewModel.addPage(uri) }
-                        }
-
-                        if (copiedUris.isEmpty()) {
-                            scannerErrorMessage = "Unable to import selected images."
-                        }
-                        isImportBusy = false
-                    }
-                },
+                onImagesSelected = { uris -> handleImageImport(uris) },
                 enabled = !isScreenBusy
             )
 
