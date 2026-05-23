@@ -210,7 +210,7 @@ fun DocumentsScreen(
                                         start = 12.dp,
                                         end = 12.dp,
                                         top = 8.dp,
-                                        bottom = 88.dp
+                                        bottom = 132.dp
                                     ),
                                     verticalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
@@ -283,7 +283,7 @@ fun DocumentsScreen(
                                     columns = GridCells.Adaptive(minSize = 180.dp),
                                     modifier = Modifier
                                         .fillMaxSize(),
-                                    contentPadding = PaddingValues(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 108.dp),
+                                    contentPadding = PaddingValues(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 132.dp),
                                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                                     verticalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
