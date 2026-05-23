@@ -54,6 +54,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.armanmaurya.archiv.R
+import com.armanmaurya.archiv.SharedIntent
 import com.armanmaurya.archiv.domain.model.Document
 import com.armanmaurya.archiv.ui.document.components.ArchivSearchBar
 import com.armanmaurya.archiv.ui.document.components.DocumentItem
@@ -71,9 +72,9 @@ import com.armanmaurya.archiv.ui.document.components.TagStrip
 @Composable
 fun DocumentsScreen(
     viewModel: DocumentViewModel,
-    sharedUris: List<Uri> = emptyList(),
-    onSharedUrisProcessed: () -> Unit = {},
-    onOpenScanner: () -> Unit,
+    sharedIntent: SharedIntent = SharedIntent.None,
+    onSharedIntentProcessed: () -> Unit = {},
+    onOpenScanner: (List<Uri>) -> Unit,
     onOpenSettings: () -> Unit,
     sharedTransitionScope: SharedTransitionScope? = null,
     animatedVisibilityScope: AnimatedVisibilityScope? = null
@@ -112,10 +113,17 @@ fun DocumentsScreen(
         }
     }
 
-    LaunchedEffect(sharedUris) {
-        if (sharedUris.isNotEmpty()) {
-            viewModel.importDocuments(sharedUris)
-            onSharedUrisProcessed()
+    LaunchedEffect(sharedIntent) {
+        when (sharedIntent) {
+            is SharedIntent.Pdfs -> {
+                viewModel.importDocuments(sharedIntent.uris)
+                onSharedIntentProcessed()
+            }
+            is SharedIntent.Images -> {
+                onOpenScanner(sharedIntent.uris)
+                onSharedIntentProcessed()
+            }
+            SharedIntent.None -> {}
         }
     }
 
@@ -137,7 +145,7 @@ fun DocumentsScreen(
         floatingActionButton = {
             Fab(
                 onImportPdf = { importPdfLauncher.launch(arrayOf("application/pdf")) },
-                onOpenScanner = onOpenScanner,
+                onOpenScanner = { onOpenScanner(emptyList()) },
                 sharedTransitionScope = sharedTransitionScope,
                 animatedVisibilityScope = animatedVisibilityScope
             )

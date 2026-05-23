@@ -19,7 +19,7 @@ import org.opencv.android.OpenCVLoader
 
 class MainActivity : AppCompatActivity() {
 
-    private var sharedUris by mutableStateOf<List<Uri>>(emptyList())
+    private var sharedIntent by mutableStateOf<SharedIntent>(SharedIntent.None)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,8 +45,8 @@ class MainActivity : AppCompatActivity() {
                 pureBlack = settingsState.pureBlack
             ) {
                 AppNavHost(
-                    sharedUris = sharedUris,
-                    onSharedUrisProcessed = { sharedUris = emptyList() }
+                    sharedIntent = sharedIntent,
+                    onSharedIntentProcessed = { sharedIntent = SharedIntent.None }
                 )
             }
         }
@@ -62,17 +62,23 @@ class MainActivity : AppCompatActivity() {
         
         when (intent.action) {
             Intent.ACTION_SEND -> {
-                if ("application/pdf" == intent.type) {
-                    (intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))?.let { uri ->
-                        sharedUris = listOf(uri)
-                    }
+                val type = intent.type ?: return
+                val uri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM) ?: return
+                
+                sharedIntent = when {
+                    type.startsWith("application/pdf") -> SharedIntent.Pdfs(listOf(uri))
+                    type.startsWith("image/") -> SharedIntent.Images(listOf(uri))
+                    else -> SharedIntent.None
                 }
             }
             Intent.ACTION_SEND_MULTIPLE -> {
-                if ("application/pdf" == intent.type) {
-                    intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)?.let { uris ->
-                        sharedUris = uris
-                    }
+                val type = intent.type ?: return
+                val uris = intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM) ?: return
+                
+                sharedIntent = when {
+                    type.startsWith("application/pdf") -> SharedIntent.Pdfs(uris)
+                    type.startsWith("image/") -> SharedIntent.Images(uris)
+                    else -> SharedIntent.None
                 }
             }
         }

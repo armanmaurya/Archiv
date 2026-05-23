@@ -16,9 +16,9 @@ interface DocumentDao {
     @Query(
         "SELECT * FROM documents " +
             "WHERE fileName LIKE '%' || :query || '%' " +
-            "ORDER BY modifiedAtMillis DESC"
+            "ORDER BY MAX(COALESCE(lastOpenedAtMillis, 0), modifiedAtMillis) DESC"
     )
-    fun observeByModifiedDesc(query: String): Flow<List<DocumentWithTags>>
+    fun observeByRecent(query: String): Flow<List<DocumentWithTags>>
 
     @Transaction
     @Query(
@@ -32,14 +32,6 @@ interface DocumentDao {
     @Query(
         "SELECT * FROM documents " +
             "WHERE fileName LIKE '%' || :query || '%' " +
-            "ORDER BY COALESCE(lastOpenedAtMillis, 0) DESC, modifiedAtMillis DESC"
-    )
-    fun observeByLastOpenedDesc(query: String): Flow<List<DocumentWithTags>>
-
-    @Transaction
-    @Query(
-        "SELECT * FROM documents " +
-            "WHERE fileName LIKE '%' || :query || '%' " +
             "AND id IN (" +
             "SELECT documentId FROM document_tags " +
             "INNER JOIN tags ON tags.id = document_tags.tagId " +
@@ -47,9 +39,9 @@ interface DocumentDao {
             "GROUP BY documentId " +
             "HAVING COUNT(DISTINCT tags.name) = :tagCount" +
             ") " +
-            "ORDER BY modifiedAtMillis DESC"
+            "ORDER BY MAX(COALESCE(lastOpenedAtMillis, 0), modifiedAtMillis) DESC"
     )
-    fun observeByModifiedDescWithTags(
+    fun observeByRecentWithTags(
         query: String,
         tags: List<String>,
         tagCount: Int
@@ -69,25 +61,6 @@ interface DocumentDao {
             "ORDER BY fileName COLLATE NOCASE ASC"
     )
     fun observeByNameAscWithTags(
-        query: String,
-        tags: List<String>,
-        tagCount: Int
-    ): Flow<List<DocumentWithTags>>
-
-    @Transaction
-    @Query(
-        "SELECT * FROM documents " +
-            "WHERE fileName LIKE '%' || :query || '%' " +
-            "AND id IN (" +
-            "SELECT documentId FROM document_tags " +
-            "INNER JOIN tags ON tags.id = document_tags.tagId " +
-            "WHERE tags.name IN (:tags) " +
-            "GROUP BY documentId " +
-            "HAVING COUNT(DISTINCT tags.name) = :tagCount" +
-            ") " +
-            "ORDER BY COALESCE(lastOpenedAtMillis, 0) DESC, modifiedAtMillis DESC"
-    )
-    fun observeByLastOpenedDescWithTags(
         query: String,
         tags: List<String>,
         tagCount: Int

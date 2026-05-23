@@ -27,9 +27,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 enum class DocumentSort {
-    MODIFIED_DESC,
+    RECENT,
     NAME_ASC,
-    LAST_OPENED_DESC,
     SIZE_DESC
 }
 
@@ -78,25 +77,19 @@ class DocumentRepository(context: Context) {
         val tags = normalizeTagNames(selectedTags)
         val source = if (tags.isEmpty()) {
             when (sort) {
-                DocumentSort.MODIFIED_DESC -> documentDao.observeByModifiedDesc(query)
+                DocumentSort.RECENT -> documentDao.observeByRecent(query)
                 DocumentSort.NAME_ASC -> documentDao.observeByNameAsc(query)
-                DocumentSort.LAST_OPENED_DESC -> documentDao.observeByLastOpenedDesc(query)
                 DocumentSort.SIZE_DESC -> documentDao.observeBySizeDesc(query)
             }
         } else {
             val tagCount = tags.size
             when (sort) {
-                DocumentSort.MODIFIED_DESC -> documentDao.observeByModifiedDescWithTags(
+                DocumentSort.RECENT -> documentDao.observeByRecentWithTags(
                     query = query,
                     tags = tags,
                     tagCount = tagCount
                 )
                 DocumentSort.NAME_ASC -> documentDao.observeByNameAscWithTags(
-                    query = query,
-                    tags = tags,
-                    tagCount = tagCount
-                )
-                DocumentSort.LAST_OPENED_DESC -> documentDao.observeByLastOpenedDescWithTags(
                     query = query,
                     tags = tags,
                     tagCount = tagCount
