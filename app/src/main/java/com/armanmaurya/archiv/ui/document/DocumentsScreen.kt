@@ -76,6 +76,7 @@ fun DocumentsScreen(
     onSharedIntentProcessed: () -> Unit = {},
     onOpenScanner: (List<Uri>) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenDocument: (String) -> Unit,
     sharedTransitionScope: SharedTransitionScope? = null,
     animatedVisibilityScope: AnimatedVisibilityScope? = null
 ) {
@@ -92,6 +93,22 @@ fun DocumentsScreen(
     var pendingExportDocumentId by remember { mutableStateOf<String?>(null) }
     var pendingTagDocument by remember { mutableStateOf<Document?>(null) }
     var pendingRenameDocument by remember { mutableStateOf<Document?>(null) }
+
+    val openWithExternal: (String) -> Unit = { documentId ->
+        val openIntent = viewModel.createOpenIntent(documentId)
+        if (openIntent != null) {
+            try {
+                context.startActivity(
+                    Intent.createChooser(
+                        openIntent,
+                        "Open scan"
+                    )
+                )
+            } catch (_: ActivityNotFoundException) {
+                viewModel.onOpenAppUnavailable()
+            }
+        }
+    }
 
     val exportPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -232,20 +249,11 @@ fun DocumentsScreen(
                                             compact = false,
                                             onOpen = {
                                                 viewModel.onDocumentOpened(document.id)
-                                                val openIntent =
-                                                    viewModel.createOpenIntent(document.id)
-                                                if (openIntent != null) {
-                                                    try {
-                                                        context.startActivity(
-                                                            Intent.createChooser(
-                                                                openIntent,
-                                                                "Open scan"
-                                                            )
-                                                        )
-                                                    } catch (_: ActivityNotFoundException) {
-                                                        viewModel.onOpenAppUnavailable()
-                                                    }
-                                                }
+                                                onOpenDocument(document.id)
+                                            },
+                                            onOpenWith = {
+                                                viewModel.onDocumentOpened(document.id)
+                                                openWithExternal(document.id)
                                             },
                                             onShare = {
                                                 val shareIntent =
@@ -306,20 +314,11 @@ fun DocumentsScreen(
                                             compact = true,
                                             onOpen = {
                                                 viewModel.onDocumentOpened(document.id)
-                                                val openIntent =
-                                                    viewModel.createOpenIntent(document.id)
-                                                if (openIntent != null) {
-                                                    try {
-                                                        context.startActivity(
-                                                            Intent.createChooser(
-                                                                openIntent,
-                                                                "Open scan"
-                                                            )
-                                                        )
-                                                    } catch (_: ActivityNotFoundException) {
-                                                        viewModel.onOpenAppUnavailable()
-                                                    }
-                                                }
+                                                onOpenDocument(document.id)
+                                            },
+                                            onOpenWith = {
+                                                viewModel.onDocumentOpened(document.id)
+                                                openWithExternal(document.id)
                                             },
                                             onShare = {
                                                 val shareIntent =

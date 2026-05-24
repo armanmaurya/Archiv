@@ -67,6 +67,7 @@ fun DocumentItem(
     actionEnabled: Boolean,
     compact: Boolean = false,
     onOpen: () -> Unit,
+    onOpenWith: () -> Unit,
     onShare: () -> Unit,
     onExport: () -> Unit,
     onDelete: () -> Unit,
@@ -153,6 +154,7 @@ fun DocumentItem(
                             )
                         }
                         TagOverflowMenu(
+                            onOpenWith = onOpenWith,
                             onEditTags = onEditTags,
                             onRename = onRename,
                             enabled = actionEnabled
@@ -227,6 +229,7 @@ fun DocumentItem(
                             )
                         }
                         TagOverflowMenu(
+                            onOpenWith = onOpenWith,
                             onEditTags = onEditTags,
                             onRename = onRename,
                             enabled = actionEnabled
@@ -309,6 +312,7 @@ private fun TagChip(
 
 @Composable
 private fun TagOverflowMenu(
+    onOpenWith: () -> Unit,
     onEditTags: () -> Unit,
     onRename: () -> Unit = {},
     enabled: Boolean
@@ -330,6 +334,13 @@ private fun TagOverflowMenu(
             expanded = menuExpanded,
             onDismissRequest = { menuExpanded = false }
         ) {
+            DropdownMenuItem(
+                text = { Text("Open with") },
+                onClick = {
+                    menuExpanded = false
+                    onOpenWith()
+                }
+            )
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.document_tags_title)) },
                 onClick = {
