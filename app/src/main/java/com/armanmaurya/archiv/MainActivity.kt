@@ -11,6 +11,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.google.android.material.color.DynamicColors
+import com.armanmaurya.archiv.data.repository.SettingsRepository
+import com.armanmaurya.archiv.data.repository.dataStore
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.armanmaurya.archiv.core.theme.PDFScannerTheme
 import com.armanmaurya.archiv.navigation.AppNavHost
@@ -22,6 +27,11 @@ class MainActivity : AppCompatActivity() {
     private var sharedIntent by mutableStateOf<SharedIntent>(SharedIntent.None)
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val settingsRepository = SettingsRepository(dataStore)
+        val isDynamic = runBlocking { settingsRepository.dynamicTheme.first() }
+        if (isDynamic) {
+            DynamicColors.applyToActivityIfAvailable(this)
+        }
         super.onCreate(savedInstanceState)
 
         handleIntent(intent)

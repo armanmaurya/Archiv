@@ -30,6 +30,7 @@ import com.armanmaurya.archiv.ui.document.DocumentViewModel
 import com.armanmaurya.archiv.ui.settings.AboutScreen
 import com.armanmaurya.archiv.ui.settings.SettingsScreen
 import com.armanmaurya.archiv.ui.settings.SettingsViewModel
+import com.armanmaurya.archiv.ui.viewer.PdfViewerScreen
 
 @Composable
 inline fun <reified T : ViewModel> NavBackStackEntry.sharedViewModel(
@@ -81,6 +82,11 @@ fun AppNavHost(
                     },
                     onOpenSettings = {
                         navController.navigate(Screen.SETTINGS) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onOpenDocument = { documentId ->
+                        navController.navigate(Screen.pdfViewerRoute(documentId)) {
                             launchSingleTop = true
                         }
                     },
@@ -200,6 +206,34 @@ fun AppNavHost(
                 popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) }
             ) {
                 AboutScreen(
+                    onBackClick = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+
+            composable(
+                route = Screen.PDF_VIEWER_ROUTE,
+                arguments = listOf(
+                    navArgument(Screen.PDF_VIEWER_DOCUMENT_ID) {
+                        type = NavType.StringType
+                    }
+                ),
+                enterTransition = { slideInHorizontally(initialOffsetX = { it }) },
+                exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) },
+                popEnterTransition = { slideInHorizontally(initialOffsetX = { -it }) },
+                popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) }
+            ) { backStackEntry ->
+                val documentViewModel: DocumentViewModel = viewModel(
+                    factory = DocumentViewModel.factory(context)
+                )
+                val rawDocumentId = backStackEntry.arguments
+                    ?.getString(Screen.PDF_VIEWER_DOCUMENT_ID)
+                val documentId = rawDocumentId?.let { Uri.decode(it) } ?: return@composable
+
+                PdfViewerScreen(
+                    documentId = documentId,
+                    viewModel = documentViewModel,
                     onBackClick = {
                         navController.popBackStack()
                     }

@@ -3,6 +3,7 @@ package com.armanmaurya.archiv.ui.document
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.core.net.toUri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -120,6 +121,19 @@ class DocumentViewModel(
             null
         } catch (error: IOException) {
             errorMessage = error.message ?: "Unable to open this document."
+            null
+        }
+    }
+
+    fun getDocumentFileUri(documentId: String): Uri? {
+        return try {
+            repository.resolveAppPdfFile(documentId)?.toUri()
+                ?: throw IOException("Document not found.")
+        } catch (error: IllegalArgumentException) {
+            errorMessage = error.message ?: "Unable to load this document."
+            null
+        } catch (error: IOException) {
+            errorMessage = error.message ?: "Unable to load this document."
             null
         }
     }

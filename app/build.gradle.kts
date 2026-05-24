@@ -14,7 +14,7 @@ android {
 
     defaultConfig {
         applicationId = "com.armanmaurya.archiv"
-        minSdk = 24
+        minSdk = 28
         targetSdk = 36
         versionCode = 5
         versionName = "1.1.3"
@@ -63,6 +63,7 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.material3)
+    implementation(libs.material)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.documentfile)
     implementation(libs.kotlinx.coroutines.android)
@@ -87,6 +88,7 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.pdfbox.android)
+    implementation(libs.androidx.pdf.viewer.fragment)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
