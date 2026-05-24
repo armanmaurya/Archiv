@@ -13,22 +13,30 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.BrightnessAuto
+import androidx.compose.material.icons.filled.Brightness6
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.TopAppBar
@@ -70,11 +78,29 @@ fun PdfViewerScreen(
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             SdkExtensions.getExtensionVersion(Build.VERSION_CODES.S) >= 13
     }
-    var isTopBarVisible by remember { mutableStateOf(true) }
+    var isTopBarVisible by remember { mutableStateOf(false) }
     val autoHideMillis = 2500L
+    
+    var manualBrightness by remember { mutableStateOf(0.5f) }
+    var isAutoBrightness by remember { mutableStateOf(true) }
+    var isInteractingWithSlider by remember { mutableStateOf(false) }
 
-    LaunchedEffect(isTopBarVisible) {
-        if (isTopBarVisible) {
+    DisposableEffect(manualBrightness, isAutoBrightness, fragmentActivity) {
+        val window = fragmentActivity?.window
+        val layoutParams = window?.attributes
+        val originalBrightness = layoutParams?.screenBrightness ?: -1f
+        
+        layoutParams?.screenBrightness = if (isAutoBrightness) -1f else manualBrightness
+        window?.attributes = layoutParams
+        
+        onDispose {
+            layoutParams?.screenBrightness = originalBrightness
+            window?.attributes = layoutParams
+        }
+    }
+
+    LaunchedEffect(isTopBarVisible, isInteractingWithSlider) {
+        if (isTopBarVisible && !isInteractingWithSlider) {
             delay(autoHideMillis)
             isTopBarVisible = false
         }
@@ -131,11 +157,70 @@ fun PdfViewerScreen(
             enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
             exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut()
         ) {
-            PdfViewerTopBar(
-                title = documentId,
-                onBackClick = onBackClick
+            Column(modifier = Modifier.fillMaxWidth()) {
+                PdfViewerTopBar(
+                    title = documentId,
+                    onBackClick = onBackClick
+                )
+                BrightnessSlider(
+                    manualBrightness = manualBrightness,
+                    isAutoBrightness = isAutoBrightness,
+                    onBrightnessChange = { 
+                        manualBrightness = it
+                        isAutoBrightness = false
+                        isInteractingWithSlider = true
+                    },
+                    onToggleAuto = { isAutoBrightness = true },
+                    onInteractionFinished = { isInteractingWithSlider = false }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BrightnessSlider(
+    manualBrightness: Float,
+    isAutoBrightness: Boolean,
+    onBrightnessChange: (Float) -> Unit,
+    onToggleAuto: () -> Unit,
+    onInteractionFinished: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(onClick = onToggleAuto) {
+            Icon(
+                imageVector = if (isAutoBrightness) Icons.Default.BrightnessAuto else Icons.Default.WbSunny,
+                contentDescription = "Brightness mode",
+                tint = if (isAutoBrightness) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        Slider(
+            value = manualBrightness,
+            onValueChange = onBrightnessChange,
+            onValueChangeFinished = onInteractionFinished,
+            enabled = true,
+            valueRange = 0f..1f,
+            modifier = Modifier.weight(1f),
+            colors = if (isAutoBrightness) {
+                SliderDefaults.colors(
+                    thumbColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                    activeTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                    inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                )
+            } else {
+                SliderDefaults.colors(
+                    thumbColor = MaterialTheme.colorScheme.primary,
+                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                    inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            }
+        )
     }
 }
 
