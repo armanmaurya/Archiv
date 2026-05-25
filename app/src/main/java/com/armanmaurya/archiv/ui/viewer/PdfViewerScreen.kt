@@ -13,34 +13,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.BrightnessAuto
-import androidx.compose.material.icons.filled.Brightness6
-import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -52,7 +32,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -63,6 +42,8 @@ import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentContainerView
 import androidx.pdf.viewer.fragment.PdfViewerFragment
 import com.armanmaurya.archiv.ui.document.DocumentViewModel
+import com.armanmaurya.archiv.ui.viewer.components.BrightnessSlider
+import com.armanmaurya.archiv.ui.viewer.components.TopBar
 import kotlinx.coroutines.delay
 
 @Composable
@@ -158,7 +139,7 @@ fun PdfViewerScreen(
             exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut()
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
-                PdfViewerTopBar(
+                TopBar(
                     title = documentId,
                     onBackClick = onBackClick
                 )
@@ -175,52 +156,6 @@ fun PdfViewerScreen(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun BrightnessSlider(
-    manualBrightness: Float,
-    isAutoBrightness: Boolean,
-    onBrightnessChange: (Float) -> Unit,
-    onToggleAuto: () -> Unit,
-    onInteractionFinished: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconButton(onClick = onToggleAuto) {
-            Icon(
-                imageVector = if (isAutoBrightness) Icons.Default.BrightnessAuto else Icons.Default.WbSunny,
-                contentDescription = "Brightness mode",
-                tint = if (isAutoBrightness) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Slider(
-            value = manualBrightness,
-            onValueChange = onBrightnessChange,
-            onValueChangeFinished = onInteractionFinished,
-            enabled = true,
-            valueRange = 0f..1f,
-            modifier = Modifier.weight(1f),
-            colors = if (isAutoBrightness) {
-                SliderDefaults.colors(
-                    thumbColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
-                    activeTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
-                    inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
-                )
-            } else {
-                SliderDefaults.colors(
-                    thumbColor = MaterialTheme.colorScheme.primary,
-                    activeTrackColor = MaterialTheme.colorScheme.primary,
-                    inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            }
-        )
     }
 }
 
@@ -299,39 +234,6 @@ private fun PdfViewerFragmentHost(
                 fragment.documentUri = documentUri
             }
         }
-    )
-}
-
-@Composable
-@OptIn(ExperimentalMaterial3Api::class)
-private fun PdfViewerTopBar(
-    title: String,
-    onBackClick: () -> Unit
-) {
-    TopAppBar(
-        title = {
-            Box(modifier = Modifier.statusBarsPadding().padding(top = 8.dp, bottom = 16.dp)) {
-                Text(
-                    text = title,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        },
-        navigationIcon = {
-            Box(modifier = Modifier.statusBarsPadding().padding(top = 8.dp, bottom = 16.dp)) {
-                IconButton(onClick = onBackClick) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back"
-                    )
-                }
-            }
-        },
-        windowInsets = WindowInsets(0),
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
-        )
     )
 }
 

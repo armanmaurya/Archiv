@@ -7,6 +7,8 @@ import android.os.ParcelFileDescriptor
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -61,6 +63,7 @@ import kotlin.math.pow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun DocumentItem(
     document: Document,
@@ -81,7 +84,11 @@ fun DocumentItem(
         modifier = modifier
             .fillMaxWidth()
             .animateContentSize(animationSpec = spring(dampingRatio = 0.8f))
-            .clickable(enabled = actionEnabled, onClick = onOpen),
+            .combinedClickable(
+                enabled = actionEnabled,
+                onClick = onOpen,
+                onLongClick = onOpenWith
+            ),
         shape = RoundedCornerShape(8.dp)
     ) {
         if (compact) {
