@@ -67,6 +67,10 @@ Archiv uses the following open-source libraries:
 - [PDFBox-Android](https://github.com/TomRoush/PdfBox-Android) - A port of Apache PDFBox for Android.
 - [Reorderable](https://github.com/calvinconcept/reorderable) - Drag-and-drop reordering for Jetpack Compose.
 
+## Related Projects
+
+- [DocumentCorNet](https://github.com/armanmaurya/DocumentCorNet) — the repository providing the corner-detection and enhancement model used by Archiv in its scanning pipeline.
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
