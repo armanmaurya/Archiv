@@ -42,7 +42,7 @@ android {
     }
     buildFeatures {
         compose = true
-        mlModelBinding = true
+        mlModelBinding = false
     }
 
     splits {
