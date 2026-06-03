@@ -1,0 +1,5 @@
+Initial release on F-Droid.
+- ML-powered document detection
+- Tagging and fast search
+- Local PDF generation
+- Multi-language support (English/Hindi)

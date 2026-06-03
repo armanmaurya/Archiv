@@ -23,10 +23,10 @@ with fast search speed, tagging, importing and sharing directly.
 ## Screenshots
 
 <div align="center">
-  <img width="23%" src="screenshots/screenshot_4.jpg" alt="Settings Screen">
-  <img width="23%" src="screenshots/screenshot_1.jpg" alt="Documents Screen">
-  <img width="23%" src="screenshots/screenshot_2.jpg" alt="Scanner Screen">
-  <img width="23%" src="screenshots/screenshot_3.jpg" alt="Editor Screen">
+  <img width="23%" src="fastlane/metadata/android/en-US/images/phoneScreenshots/4.jpg" alt="Settings Screen">
+  <img width="23%" src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.jpg" alt="Documents Screen">
+  <img width="23%" src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.jpg" alt="Scanner Screen">
+  <img width="23%" src="fastlane/metadata/android/en-US/images/phoneScreenshots/3.jpg" alt="Editor Screen">
 </div>
 
 ## Tech Stack
@@ -73,4 +73,4 @@ Archiv uses the following open-source libraries:
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU GPL v3 License - see the [LICENSE](LICENSE) file for details.
