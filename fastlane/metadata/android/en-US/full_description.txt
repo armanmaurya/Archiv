@@ -1,12 +1,14 @@
-Archiv is an Android app for managing and scanning documents, featuring fast search, tagging, and local processing for maximum privacy.
+<p>Archiv is an Android app for managing and scanning documents, featuring fast search, tagging, and local processing for maximum privacy.</p>
 
-## Features
+<p><strong>Features</strong></p>
 
-- **High-Quality Scanning**: Capture documents with precision and ML-powered corner detection.
-- **Document Management**: Organize your scanned documents with a powerful tagging system and fast search.
-- **PDF Generation**: Convert your scans into high-quality PDF files.
-- **Privacy First**: All processing and storage happen locally on your device.
-- **Multi-language Support**: Available in English and Hindi.
-- **Modern UI**: Built with Jetpack Compose for a smooth and responsive experience.
+<ul>
+	<li><strong>High-Quality Scanning</strong>: Capture documents with precision and ML-powered corner detection.</li>
+	<li><strong>Document Management</strong>: Organize your scanned documents with a powerful tagging system and fast search.</li>
+	<li><strong>PDF Generation</strong>: Convert your scans into high-quality PDF files.</li>
+	<li><strong>Privacy First</strong>: All processing and storage happen locally on your device.</li>
+	<li><strong>Multi-language Support</strong>: Available in English and Hindi.</li>
+	<li><strong>Modern UI</strong>: Built with Jetpack Compose for a smooth and responsive experience.</li>
+</ul>
 
-Everything is processed on-device, and your documents never leave your phone. Open-source and privacy-focused.
+<p>Everything is processed on-device, and your documents never leave your phone. Open-source and privacy-focused.</p>
