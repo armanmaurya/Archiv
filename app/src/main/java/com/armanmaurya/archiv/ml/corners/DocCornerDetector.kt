@@ -5,29 +5,27 @@ import android.graphics.Bitmap
 import android.util.Log
 
 class DocCornerDetector(private val runner: DocCornerTFLiteRunner) : CornerDetector {
-    private val openCvFallback = OpenCVCornerDetector()
 
     companion object {
         private const val TAG = "DocCornerDetector"
-        const val DEFAULT_MODEL_ASSET_PATH = "doccornernet_model_fp16.tflite"
     }
 
     override fun detect(src: Bitmap, ctx: Context, isLiveAnalysis: Boolean): DetectionResult {
         return try {
             val srcW = src.width
             val srcH = src.height
-            if (srcW <= 0 || srcH <= 0) return DetectionResult.fail(Source.DOCQUAD)
+            if (srcW <= 0 || srcH <= 0) return DetectionResult.fail()
 
             // Try to run heatmap-based model (4-channel corner heatmaps + presence)
             val heatmapsResult = runner.runHeatmapsAndPresence(src)
             if (heatmapsResult != null) {
                 // If model predicts no document present, fail
-                if (heatmapsResult.presence <= 0.5f) return DetectionResult.fail(Source.DOCQUAD)
+                if (heatmapsResult.presence <= 0.5f) return DetectionResult.fail()
 
                 val hmW = heatmapsResult.width
                 val hmH = heatmapsResult.height
                 val hmChannels = heatmapsResult.heatmaps.size
-                if (hmChannels < 4) return DetectionResult.fail(Source.DOCQUAD)
+                if (hmChannels < 4) return DetectionResult.fail()
 
                 // Extract corner per-channel by argmax
                 val corners = mutableListOf<DoubleArray>()
@@ -52,23 +50,16 @@ class DocCornerDetector(private val runner: DocCornerTFLiteRunner) : CornerDetec
                 val sourceQuad = corners.toTypedArray()
 
                 if (!isValidQuad(sourceQuad, srcW, srcH)) {
-                    return DetectionResult.fail(Source.DOCQUAD)
+                    return DetectionResult.fail()
                 }
 
-                return DetectionResult.successDebug(
-                    Source.DOCQUAD,
-                    sourceQuad,
-                    DEFAULT_MODEL_ASSET_PATH,
-                    null,
-                    null
-                )
+                return DetectionResult.success(sourceQuad)
             }
 
-            // If heatmap inference is unavailable, fallback to classic OpenCV corners.
-            openCvFallback.detect(src, ctx, isLiveAnalysis)
+            DetectionResult.fail()
         } catch (t: Throwable) {
             Log.e(TAG, "Detection failed", t)
-            DetectionResult.fail(Source.DOCQUAD)
+            DetectionResult.fail()
         }
     }
 

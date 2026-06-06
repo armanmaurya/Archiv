@@ -7,7 +7,6 @@ import android.util.Log
 import androidx.camera.core.ImageProxy
 import com.armanmaurya.archiv.ml.corners.DocCornerDetector
 import com.armanmaurya.archiv.ml.corners.DocCornerTFLiteRunner
-import org.opencv.core.Core
 import java.nio.ByteBuffer
 
 class FrameProcessor {
@@ -28,7 +27,7 @@ class FrameProcessor {
     fun initialize(context: Context) {
         if (docCornerDetector == null) {
             try {
-                val runner = DocCornerTFLiteRunner.getInstance(context, DocCornerDetector.DEFAULT_MODEL_ASSET_PATH)
+                val runner = DocCornerTFLiteRunner.getInstance(context)
                 docCornerDetector = DocCornerDetector(runner)
                 Log.d(TAG, "DocCornerDetector initialized")
             } catch (e: Exception) {
@@ -41,7 +40,7 @@ class FrameProcessor {
         // Lazy-initialize detector on first frame (not on compose creation)
         if (docCornerDetector == null) {
             try {
-                val runner = DocCornerTFLiteRunner.getInstance(context, DocCornerDetector.DEFAULT_MODEL_ASSET_PATH)
+                val runner = DocCornerTFLiteRunner.getInstance(context)
                 docCornerDetector = DocCornerDetector(runner)
                 Log.d(TAG, "DocCornerDetector initialized on first frame")
             } catch (e: Exception) {

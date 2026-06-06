@@ -1,13 +1,10 @@
 package com.armanmaurya.archiv.bitmap
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Matrix
+import android.graphics.Paint
 import android.graphics.PointF
-import org.opencv.android.Utils
-import org.opencv.core.Mat
-import org.opencv.core.MatOfPoint2f
-import org.opencv.core.Point
-import org.opencv.core.Size
-import org.opencv.imgproc.Imgproc
 import kotlin.math.sqrt
 
 fun fullImageBounds(): List<PointF> = listOf(
@@ -45,34 +42,29 @@ fun warpBitmapWithQuad(bitmap: Bitmap, normalizedCorners: List<PointF>): Bitmap?
         edgeDistance(mapped[0], mapped[3])
     ).toInt().coerceAtLeast(1)
 
-    val source = Mat()
-    val warped = Mat()
-    val srcPoints = MatOfPoint2f(
-        Point(mapped[0].x.toDouble(), mapped[0].y.toDouble()),
-        Point(mapped[1].x.toDouble(), mapped[1].y.toDouble()),
-        Point(mapped[2].x.toDouble(), mapped[2].y.toDouble()),
-        Point(mapped[3].x.toDouble(), mapped[3].y.toDouble())
+    val srcPoints = floatArrayOf(
+        mapped[0].x, mapped[0].y,
+        mapped[1].x, mapped[1].y,
+        mapped[2].x, mapped[2].y,
+        mapped[3].x, mapped[3].y
     )
-    val dstPoints = MatOfPoint2f(
-        Point(0.0, 0.0),
-        Point((targetWidth - 1).toDouble(), 0.0),
-        Point((targetWidth - 1).toDouble(), (targetHeight - 1).toDouble()),
-        Point(0.0, (targetHeight - 1).toDouble())
+    val dstPoints = floatArrayOf(
+        0f, 0f,
+        targetWidth.toFloat(), 0f,
+        targetWidth.toFloat(), targetHeight.toFloat(),
+        0f, targetHeight.toFloat()
     )
-    return try {
-        Utils.bitmapToMat(bitmap, source)
-        val perspective = Imgproc.getPerspectiveTransform(srcPoints, dstPoints)
-        Imgproc.warpPerspective(source, warped, perspective, Size(targetWidth.toDouble(), targetHeight.toDouble()))
-        perspective.release()
-        val output = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
-        Utils.matToBitmap(warped, output)
-        output
-    } finally {
-        source.release()
-        warped.release()
-        srcPoints.release()
-        dstPoints.release()
-    }
+
+    val matrix = Matrix()
+    val success = matrix.setPolyToPoly(srcPoints, 0, dstPoints, 0, 4)
+    if (!success) return null
+
+    val output = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(output)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    canvas.drawBitmap(bitmap, matrix, paint)
+
+    return output
 }
 
 private fun edgeDistance(a: PointF, b: PointF): Float {

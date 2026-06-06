@@ -20,7 +20,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.armanmaurya.archiv.core.theme.PDFScannerTheme
 import com.armanmaurya.archiv.navigation.AppNavHost
 import com.armanmaurya.archiv.ui.settings.SettingsViewModel
-import org.opencv.android.OpenCVLoader
 
 class MainActivity : AppCompatActivity() {
 
@@ -35,12 +34,6 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
 
         handleIntent(intent)
-
-        if (OpenCVLoader.initDebug()) {
-            Log.d("SCANNER", "OpenCV loaded successfully!")
-        } else {
-            Log.e("SCANNER", "OpenCV load failed.")
-        }
 
         enableEdgeToEdge()
         setContent {

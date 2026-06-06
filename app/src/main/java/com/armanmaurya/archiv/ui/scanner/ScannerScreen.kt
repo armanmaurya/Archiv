@@ -110,7 +110,7 @@ fun ScannerScreen(
             // Perform edge detection on each imported image if enabled
             if (isAutoEdgeDetectionEnabled && copiedUris.isNotEmpty()) {
                 val detector = withContext(Dispatchers.Default) {
-                    val runner = DocCornerTFLiteRunner.getInstance(context, DocCornerDetector.DEFAULT_MODEL_ASSET_PATH)
+                    val runner = DocCornerTFLiteRunner.getInstance(context)
                     DocCornerDetector(runner)
                 }
 
@@ -165,7 +165,7 @@ fun ScannerScreen(
     LaunchedEffect(Unit) {
         coroutineScope.launch(Dispatchers.Default) {
             try {
-                DocCornerTFLiteRunner.getInstanceAsync(context, DocCornerDetector.DEFAULT_MODEL_ASSET_PATH).get()
+                DocCornerTFLiteRunner.getInstanceAsync(context).get()
             } catch (e: Exception) {
                 // Model preload failed, but processFrame has fallback logic
             }

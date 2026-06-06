@@ -24,7 +24,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -42,7 +43,7 @@ android {
     }
     buildFeatures {
         compose = true
-        mlModelBinding = false
+        mlModelBinding = true
     }
 
     splits {
@@ -92,7 +93,6 @@ dependencies {
     implementation(libs.litert)
     implementation(libs.litert.support)
     implementation(libs.litert.metadata)
-    implementation(libs.opencv)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.pdfbox.android)
