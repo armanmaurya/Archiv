@@ -1,16 +1,17 @@
 package com.armanmaurya.archiv.ui.viewer
 
 import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.AnimationVector1D
-import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.rememberSplineBasedDecay
@@ -29,28 +30,42 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -58,10 +73,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
@@ -70,6 +86,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -88,6 +106,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.roundToInt
+
+data class TextSelection(val pageIndex: Int, val startIndex: Int, val endIndex: Int)
+enum class DragHandle { LEFT, RIGHT, NONE }
 
 @Composable
 fun PdfViewerScreen(
@@ -130,7 +154,27 @@ fun PdfViewerScreen(
 
     val pdfState = rememberPdfState(uri = documentUri, context = context)
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(Color.DarkGray)) {
+    LaunchedEffect(pdfState) {
+        withContext(Dispatchers.IO) {
+            pdfState.load()
+        }
+    }
+
+    // Tracking manual interaction for indicator visibility
+    var lastInteractionTime by remember { mutableStateOf(0L) }
+    
+    LaunchedEffect(lastInteractionTime) {
+        if (lastInteractionTime > 0) {
+            delay(2500)
+            lastInteractionTime = 0
+        }
+    }
+
+    var activeSelection by remember { mutableStateOf<TextSelection?>(null) }
+    val haptic = LocalHapticFeedback.current
+    val viewConfiguration = LocalViewConfiguration.current
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainer)) {
         val screenWidth = maxWidth
         val screenHeight = maxHeight
         val density = LocalDensity.current
@@ -147,13 +191,154 @@ fun PdfViewerScreen(
         val splineDecay = rememberSplineBasedDecay<Float>()
         
         var isFlinging by remember { mutableStateOf(false) }
+        var isDraggingIndicator by remember { mutableStateOf(false) }
+
+        fun getCharacterAtPosition(screenX: Float, screenY: Float): Pair<Int, Int>? {
+            val touchX = screenX + horizontalState.value
+            val touchY = screenY
+            
+            val layoutInfo = listState.layoutInfo
+            val visibleItems = layoutInfo.visibleItemsInfo
+            
+            for (item in visibleItems) {
+                val pageIndex = item.index
+                val itemTop = item.offset
+                val itemBottom = item.offset + item.size
+                
+                if (touchY >= itemTop && touchY <= itemBottom) {
+                    val localY = touchY - itemTop
+                    val localX = touchX
+                    
+                    val pageSize = pdfState.pageSizes[pageIndex] ?: continue
+                    if (pageSize.width > 0 && pageSize.height > 0) {
+                        val renderedWidth = screenWidthPx * scale
+                        val renderedHeight = item.size
+                        
+                        val ratioX = pageSize.width.toFloat() / renderedWidth
+                        val ratioY = pageSize.height.toFloat() / renderedHeight
+                        
+                        val pdfX = localX * ratioX
+                        val pdfY = localY * ratioY
+                        
+                        val pageText = pdfState.pageTextCache[pageIndex]
+                        if (pageText != null) {
+                            for ((charIndex, char) in pageText.characters.withIndex()) {
+                                val rect = char.boundingBox
+                                // REFINED HIT DETECTION for characters
+                                val paddingX = 4f * ratioX
+                                val paddingY = 4f * ratioY
+                                if (pdfX >= rect.left - paddingX && pdfX <= rect.right + paddingX &&
+                                    pdfY >= rect.top - paddingY && pdfY <= rect.bottom + paddingY) {
+                                    return Pair(pageIndex, charIndex)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return null
+        }
+
+        fun getWordRange(pageText: PageText, charIndex: Int): Pair<Int, Int> {
+            val chars = pageText.characters
+            if (charIndex < 0 || charIndex >= chars.size) return charIndex to charIndex
+            
+            var start = charIndex
+            while (start > 0 && chars[start - 1].text.any { it.isLetterOrDigit() }) {
+                start--
+            }
+            
+            var end = charIndex
+            while (end < chars.size - 1 && chars[end + 1].text.any { it.isLetterOrDigit() }) {
+                end++
+            }
+            
+            return start to end
+        }
+
+        fun getHandleAtPosition(screenX: Float, screenY: Float): DragHandle {
+            val sel = activeSelection ?: return DragHandle.NONE
+            val touchX = screenX + horizontalState.value
+            val touchY = screenY
+            
+            val layoutInfo = listState.layoutInfo
+            val visibleItems = layoutInfo.visibleItemsInfo
+            
+            for (item in visibleItems) {
+                if (item.index != sel.pageIndex) continue
+                
+                val itemTop = item.offset
+                val itemBottom = item.offset + item.size
+                
+                if (touchY >= itemTop && touchY <= itemBottom) {
+                    val localY = touchY - itemTop
+                    val localX = touchX
+                    
+                    val pageSize = pdfState.pageSizes[item.index] ?: continue
+                    if (pageSize.width > 0 && pageSize.height > 0) {
+                        val renderedWidth = screenWidthPx * scale
+                        val renderedHeight = item.size
+                        
+                        val ratioX = pageSize.width.toFloat() / renderedWidth
+                        val ratioY = pageSize.height.toFloat() / renderedHeight
+                        
+                        val pdfX = localX * ratioX
+                        val pdfY = localY * ratioY
+                        
+                        val pageText = pdfState.pageTextCache[item.index] ?: continue
+                        
+                        val actualStart = min(sel.startIndex, sel.endIndex)
+                        val actualEnd = max(sel.startIndex, sel.endIndex)
+                        
+                        val hitPaddingX = with(density) { 32.dp.toPx() } * ratioX
+                        val hitPaddingY = with(density) { 32.dp.toPx() } * ratioY
+                        
+                        // Check LEFT handle (actualStart)
+                        val startChar = pageText.characters.getOrNull(actualStart)
+                        if (startChar != null) {
+                            val rect = startChar.boundingBox
+                            if (abs(pdfX - rect.left) < hitPaddingX && abs(pdfY - rect.bottom) < hitPaddingY * 1.5f) {
+                                return DragHandle.LEFT
+                            }
+                        }
+                        
+                        // Check RIGHT handle (actualEnd)
+                        val endChar = pageText.characters.getOrNull(actualEnd)
+                        if (endChar != null) {
+                            val rect = endChar.boundingBox
+                            if (abs(pdfX - rect.right) < hitPaddingX && abs(pdfY - rect.bottom) < hitPaddingY * 1.5f) {
+                                return DragHandle.RIGHT
+                            }
+                        }
+                    }
+                }
+            }
+            return DragHandle.NONE
+        }
+
+        if (!pdfState.isLoaded && !pdfState.isError) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surface),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            }
+        }
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(Unit) {
                     detectTapGestures(
-                        onTap = { isTopBarVisible = !isTopBarVisible },
+                        onTap = { 
+                            if (activeSelection != null) {
+                                activeSelection = null
+                            } else {
+                                isTopBarVisible = !isTopBarVisible 
+                            }
+                        },
                         onDoubleTap = { centroid ->
                             flingJob.value?.cancel()
                             scope.launch {
@@ -180,22 +365,76 @@ fun PdfViewerScreen(
                     coroutineScope {
                         awaitEachGesture {
                             var isZooming = false
-                            
-                            // 1. Initial Down: Stop momentum immediately
-                            val down = awaitFirstDown(requireUnconsumed = false)
+                            val down = awaitFirstDown(requireUnconsumed = true)
                             flingJob.value?.cancel()
                             isFlinging = false
+                            velocityTracker.resetTracking()
                             velocityTracker.addPosition(down.uptimeMillis, down.position)
+                            
+                            var activeDragHandle = getHandleAtPosition(down.position.x, down.position.y)
+                            if (activeDragHandle != DragHandle.NONE) {
+                                down.consume()
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
+
+                            var isLongPressTriggered = false
+                            var longPressJob: kotlinx.coroutines.Job? = null
+                            
+                            if (activeDragHandle == DragHandle.NONE) {
+                                longPressJob = scope.launch {
+                                    delay(400)
+                                    val charAt = getCharacterAtPosition(down.position.x, down.position.y)
+                                    if (charAt != null) {
+                                        isLongPressTriggered = true
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        val pageText = pdfState.pageTextCache[charAt.first]
+                                        if (pageText != null) {
+                                            val range = getWordRange(pageText, charAt.second)
+                                            activeSelection = TextSelection(charAt.first, range.first, range.second)
+                                        }
+                                    }
+                                }
+                            }
                             
                             while (true) {
                                 val event = awaitPointerEvent()
                                 val anyPressed = event.changes.any { it.pressed }
-                                if (!anyPressed) break
                                 
                                 val canceled = event.changes.any { it.isConsumed }
                                 if (canceled) break
 
+                                lastInteractionTime = System.currentTimeMillis()
+
+                                if (!anyPressed) {
+                                    if (isLongPressTriggered || activeDragHandle != DragHandle.NONE) {
+                                        event.changes.forEach { it.consume() }
+                                    }
+                                    break
+                                }
+
+                                if (activeDragHandle != DragHandle.NONE) {
+                                    val change = event.changes.first()
+                                    val charAt = getCharacterAtPosition(change.position.x, change.position.y)
+                                    if (charAt != null && activeSelection != null) {
+                                        if (charAt.first == activeSelection!!.pageIndex) {
+                                            val currentStart = activeSelection!!.startIndex
+                                            val currentEnd = activeSelection!!.endIndex
+                                            val actualStart = min(currentStart, currentEnd)
+                                            val actualEnd = max(currentStart, currentEnd)
+                                            
+                                            if (activeDragHandle == DragHandle.LEFT) {
+                                                activeSelection = activeSelection!!.copy(startIndex = charAt.second, endIndex = actualEnd)
+                                            } else {
+                                                activeSelection = activeSelection!!.copy(startIndex = actualStart, endIndex = charAt.second)
+                                            }
+                                        }
+                                    }
+                                    change.consume()
+                                    continue
+                                }
+
                                 if (event.changes.size > 1) {
+                                    longPressJob?.cancel()
                                     isZooming = true
                                     val zoomChange = event.calculateZoom()
                                     val panChange = event.calculatePan()
@@ -214,9 +453,22 @@ fun PdfViewerScreen(
                                     event.changes.forEach { it.consume() }
                                 } else {
                                     val change = event.changes.first()
-                                    velocityTracker.addPosition(change.uptimeMillis, change.position)
+                                    val dragDistance = (change.position - down.position).getDistance()
                                     
-                                    if (!isZooming) {
+                                    if (dragDistance > viewConfiguration.touchSlop && !isLongPressTriggered) {
+                                        longPressJob?.cancel()
+                                    }
+                                    
+                                    if (isLongPressTriggered) {
+                                        val charAt = getCharacterAtPosition(change.position.x, change.position.y)
+                                        if (charAt != null && activeSelection != null) {
+                                            if (charAt.first == activeSelection!!.pageIndex) {
+                                                activeSelection = activeSelection!!.copy(endIndex = charAt.second)
+                                            }
+                                        }
+                                        change.consume()
+                                    } else if (dragDistance > viewConfiguration.touchSlop) {
+                                        velocityTracker.addPosition(change.uptimeMillis, change.position)
                                         val dragAmount = change.position - change.previousPosition
                                         horizontalState.dispatchRawDelta(-dragAmount.x)
                                         listState.dispatchRawDelta(-dragAmount.y)
@@ -224,9 +476,9 @@ fun PdfViewerScreen(
                                     }
                                 }
                             }
+                            longPressJob?.cancel()
 
-                            // 2. Fling on release
-                            if (!isZooming) {
+                            if (!isZooming && !isLongPressTriggered && activeDragHandle == DragHandle.NONE) {
                                 val velocity = velocityTracker.calculateVelocity()
                                 if (abs(velocity.x) > 100 || abs(velocity.y) > 100) {
                                     flingJob.value = scope.launch {
@@ -252,14 +504,15 @@ fun PdfViewerScreen(
                     .fillMaxSize()
                     .horizontalScroll(horizontalState, enabled = false)
             ) {
-                if (pdfState.pageCount > 0) {
+                if (pdfState.isLoaded && pdfState.pageCount > 0) {
                     LazyColumn(
                         state = listState,
                         userScrollEnabled = false,
                         modifier = Modifier
                             .width(screenWidth * scale)
                             .fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
                         items(pdfState.pageCount) { pageIndex ->
                             PdfPageItem(
@@ -268,7 +521,8 @@ fun PdfViewerScreen(
                                 scale = scale,
                                 isFlinging = isFlinging,
                                 viewportWidthPx = screenWidthPx,
-                                viewportHeightPx = screenHeightPx
+                                viewportHeightPx = screenHeightPx,
+                                activeSelection = activeSelection
                             )
                             if (pageIndex < pdfState.pageCount - 1) {
                                 Spacer(modifier = Modifier.height(8.dp))
@@ -284,9 +538,49 @@ fun PdfViewerScreen(
                 }
             }
         }
+        
+        AnimatedVisibility(
+            visible = activeSelection != null,
+            enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 16.dp)
+        ) {
+            ElevatedCard(
+                shape = RoundedCornerShape(24.dp),
+                modifier = Modifier.padding(horizontal = 16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = {
+                        val sel = activeSelection
+                        if (sel != null) {
+                            val textChars = pdfState.pageTextCache[sel.pageIndex]?.characters
+                            if (textChars != null) {
+                                val start = min(sel.startIndex, sel.endIndex)
+                                val end = max(sel.startIndex, sel.endIndex)
+                                val text = textChars.subList(start, end + 1).joinToString("") { it.text }
+                                
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                val clip = ClipData.newPlainText("Copied Text", text)
+                                clipboard.setPrimaryClip(clip)
+                                Toast.makeText(context, "Text copied", Toast.LENGTH_SHORT).show()
+                                activeSelection = null
+                            }
+                        }
+                    }) {
+                        Text("Copy", style = MaterialTheme.typography.labelLarge)
+                    }
+                    TextButton(onClick = { activeSelection = null }) {
+                        Text("Clear", style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+            }
+        }
 
         AnimatedVisibility(
-            visible = isTopBarVisible,
+            visible = isTopBarVisible && activeSelection == null,
             enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
             exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut()
         ) {
@@ -309,106 +603,154 @@ fun PdfViewerScreen(
             }
         }
 
-        // Vertical Scroll Indicator on the Right (Google Drive Style)
-        if (pdfState.pageCount > 1) {
+        if (pdfState.isLoaded && pdfState.pageCount > 1) {
             val totalPages = pdfState.pageCount
             val firstVisiblePage = listState.firstVisibleItemIndex
             
-            val progress = remember(firstVisiblePage, totalPages) {
-                (firstVisiblePage.toFloat() / (totalPages - 1)).coerceIn(0f, 1f)
-            }
-
-            var isDragging by remember { mutableStateOf(false) }
-            var isIndicatorVisible by remember { mutableStateOf(false) }
-            
-            LaunchedEffect(listState.isScrollInProgress, horizontalState.isScrollInProgress, isDragging) {
-                if (listState.isScrollInProgress || horizontalState.isScrollInProgress || isDragging) {
-                    isIndicatorVisible = true
-                } else {
-                    delay(2000)
-                    isIndicatorVisible = false
+            // Continuous Progress Calculation (Pixel-level tracking)
+            val computedProgress = remember(firstVisiblePage, listState.firstVisibleItemScrollOffset, totalPages) {
+                val layoutInfo = listState.layoutInfo
+                val visibleItems = layoutInfo.visibleItemsInfo
+                if (visibleItems.isEmpty()) 0f
+                else {
+                    val firstItem = visibleItems.first()
+                    val itemHeight = firstItem.size
+                    val totalHeight = itemHeight * totalPages
+                    val currentScroll = (firstItem.index * itemHeight) + listState.firstVisibleItemScrollOffset
+                    (currentScroll.toFloat() / (totalHeight - layoutInfo.viewportEndOffset)).coerceIn(0f, 1f)
                 }
             }
 
+            var manualScrollProgress by remember { mutableStateOf<Float?>(null) }
+            val displayProgress = manualScrollProgress ?: computedProgress
+
+            val isIndicatorVisible = (lastInteractionTime > 0 || isDraggingIndicator || isTopBarVisible || isFlinging) && activeSelection == null
+
             AnimatedVisibility(
-                visible = isIndicatorVisible || isTopBarVisible,
+                visible = isIndicatorVisible,
                 enter = fadeIn() + slideInHorizontally(initialOffsetX = { it }),
                 exit = fadeOut() + slideOutHorizontally(targetOffsetX = { it }),
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .padding(end = 8.dp)
+                    .padding(end = 12.dp)
             ) {
                 BoxWithConstraints(
                     modifier = Modifier
-                        .width(120.dp) // Wide enough to hold bubble + handle
-                        .fillMaxHeight(0.7f)
+                        .width(160.dp)
+                        .fillMaxHeight()
+                        .padding(vertical = 48.dp)
                 ) {
                     val trackHeightPx = constraints.maxHeight.toFloat()
-                    val handleHeight = 52.dp
-                    val handleHeightPx = with(density) { handleHeight.toPx() }
-                    val maxOffsetPx = trackHeightPx - handleHeightPx
+                    val handleSize = 56.dp
+                    val handleSizePx = with(density) { handleSize.toPx() }
+                    val maxOffsetPx = (trackHeightPx - handleSizePx).coerceAtLeast(0f)
                     
-                    val topOffset = with(density) { (progress * maxOffsetPx).toDp() }
+                    val topOffset = with(density) { (displayProgress * maxOffsetPx).toDp().coerceAtLeast(0.dp) }
 
-                    // Interaction Layer (invisible wide track for easier grabbing)
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .pointerInput(totalPages) {
-                                detectDragGestures(
-                                    onDragStart = { isDragging = true },
-                                    onDragEnd = { isDragging = false },
-                                    onDragCancel = { isDragging = false },
-                                    onDrag = { change, _ ->
-                                        val newProgress = (change.position.y / trackHeightPx).coerceIn(0f, 1f)
-                                        val targetPage = (newProgress * (totalPages - 1)).toInt()
-                                        scope.launch {
-                                            listState.scrollToItem(targetPage)
-                                        }
-                                        change.consume()
-                                    }
-                                )
-                            }
-                    )
-
-                    // Page Bubble (Appears to the left of the handle when dragging)
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = isDragging,
+                    // Page Bubble (M3 Style)
+                    AnimatedVisibility(
+                        visible = isDraggingIndicator,
                         enter = fadeIn() + slideInHorizontally(initialOffsetX = { it / 2 }),
                         exit = fadeOut() + slideOutHorizontally(targetOffsetX = { it / 2 }),
                         modifier = Modifier
                             .align(Alignment.TopStart)
                             .padding(top = topOffset)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .background(
-                                    color = Color.DarkGray.copy(alpha = 0.9f),
-                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp)
-                                )
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            contentAlignment = Alignment.Center
+                        Surface(
+                            tonalElevation = 6.dp,
+                            shape = RoundedCornerShape(28.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                         ) {
                             Text(
-                                text = "Page ${firstVisiblePage + 1} / $totalPages",
+                                text = "${listState.firstVisibleItemIndex + 1} / $totalPages",
                                 style = MaterialTheme.typography.labelLarge,
-                                color = Color.White
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                             )
                         }
                     }
 
-                    // Vertical Handle (The small bar on the right edge)
-                    Box(
+                    // Circular Handle (M3 Style)
+                    Surface(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(top = topOffset)
-                            .width(6.dp)
-                            .height(handleHeight)
-                            .background(
-                                color = if (isDragging) Color.White else Color.White.copy(alpha = 0.5f),
-                                shape = androidx.compose.foundation.shape.RoundedCornerShape(3.dp)
-                            )
-                    )
+                            .size(handleSize)
+                            .pointerInput(Unit) {
+                                awaitEachGesture {
+                                    val down = awaitFirstDown(requireUnconsumed = false)
+                                    down.consume()
+                                    flingJob.value?.cancel() // STOP FLING IMMEDIATELY
+                                    isFlinging = false
+                                    lastInteractionTime = System.currentTimeMillis()
+                                }
+                            }
+                            .pointerInput(totalPages) {
+                                coroutineScope {
+                                    detectDragGestures(
+                                        onDragStart = { 
+                                            isDraggingIndicator = true 
+                                            flingJob.value?.cancel() // STOP FLING IMMEDIATELY
+                                            isFlinging = false
+                                            manualScrollProgress = computedProgress
+                                            lastInteractionTime = System.currentTimeMillis()
+                                        },
+                                        onDragEnd = { 
+                                            isDraggingIndicator = false 
+                                            manualScrollProgress = null
+                                            lastInteractionTime = System.currentTimeMillis()
+                                        },
+                                        onDragCancel = { 
+                                            isDraggingIndicator = false 
+                                            manualScrollProgress = null
+                                            lastInteractionTime = System.currentTimeMillis()
+                                        },
+                                        onDrag = { change, dragAmount ->
+                                            lastInteractionTime = System.currentTimeMillis()
+                                            
+                                            val currentProgress = manualScrollProgress ?: computedProgress
+                                            val deltaProgress = dragAmount.y / maxOffsetPx
+                                            val newProgress = (currentProgress + deltaProgress).coerceIn(0f, 1f)
+                                            manualScrollProgress = newProgress
+                                            
+                                            val layoutInfo = listState.layoutInfo
+                                            val itemHeight = layoutInfo.visibleItemsInfo.firstOrNull()?.size ?: 0
+                                            if (itemHeight > 0) {
+                                                val totalScrollPx = itemHeight * totalPages
+                                                val targetScrollPx = newProgress * (totalScrollPx - layoutInfo.viewportEndOffset)
+                                                val targetIndex = (targetScrollPx / itemHeight).toInt()
+                                                val targetOffset = (targetScrollPx % itemHeight).toInt()
+                                                
+                                                launch {
+                                                    listState.scrollToItem(targetIndex.coerceIn(0, totalPages - 1), targetOffset)
+                                                }
+                                            }
+                                            change.consume()
+                                        }
+                                    )
+                                }
+                            },
+                        shape = CircleShape,
+                        color = if (isDraggingIndicator) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = if (isDraggingIndicator) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer,
+                        tonalElevation = 4.dp,
+                        shadowElevation = 2.dp
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowUp,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowDown,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(24.dp).offset(y = (-4).dp)
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -422,7 +764,8 @@ fun PdfPageItem(
     scale: Float,
     isFlinging: Boolean,
     viewportWidthPx: Int,
-    viewportHeightPx: Int
+    viewportHeightPx: Int,
+    activeSelection: TextSelection?
 ) {
     val context = LocalContext.current
     val thumbnailBitmapState = remember { mutableStateOf<Bitmap?>(null) }
@@ -430,58 +773,81 @@ fun PdfPageItem(
     val tileBitmapState = remember { mutableStateOf<Bitmap?>(null) }
     val tileRectState = remember { mutableStateOf<android.graphics.RectF?>(null) }
     
-    var pageBoundsInWindow by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
+    var pageBoundsInWindow by remember { mutableStateOf(Rect.Zero) }
 
-    // Tier 1: Instant Thumbnail (Ultra low-res for speed)
-    LaunchedEffect(pageIndex) {
+    LaunchedEffect(pageIndex, pdfState.isLoaded) {
+        if (!pdfState.isLoaded) return@LaunchedEffect
         withContext(Dispatchers.IO) {
             thumbnailBitmapState.value = pdfState.renderPage(pageIndex, 200)
         }
+        if (!pdfState.pageTextCache.containsKey(pageIndex)) {
+            withContext(Dispatchers.Default) {
+                val text = pdfState.extractText(pageIndex)
+                if (text != null) {
+                    pdfState.pageTextCache[pageIndex] = text
+                }
+            }
+        }
     }
 
-    // Tier 2: Normal Base Layer (Screen width)
-    LaunchedEffect(pageIndex) {
-        delay(150) // Slight delay to prioritize thumbnail and scrolling
+    LaunchedEffect(pageIndex, pdfState.isLoaded) {
+        if (!pdfState.isLoaded) return@LaunchedEffect
+        delay(150)
         withContext(Dispatchers.IO) {
             baseBitmapState.value = pdfState.renderPage(pageIndex, context.resources.displayMetrics.widthPixels)
         }
     }
 
-    // Tier 3: High-Res Tile Layer (Zoomed region)
-    LaunchedEffect(pageIndex, scale, pageBoundsInWindow.left, pageBoundsInWindow.top, isFlinging) {
-        if (scale <= 1.1f) {
+    var lastTriggeredBounds by remember { mutableStateOf(Rect.Zero) }
+    
+    LaunchedEffect(pageIndex, scale, isFlinging, pageBoundsInWindow, pdfState.isLoaded) {
+        if (!pdfState.isLoaded || scale <= 1.1f) {
             tileBitmapState.value = null
             tileRectState.value = null
             return@LaunchedEffect
         }
 
-        delay(if (isFlinging) 400 else 250)
+        val windowRect = Rect(0f, 0f, viewportWidthPx.toFloat(), viewportHeightPx.toFloat())
+        val intersection = windowRect.intersect(pageBoundsInWindow)
+
+        if (intersection.isEmpty || intersection.width < 10 || intersection.height < 10) {
+            return@LaunchedEffect
+        }
+
+        // FIX: Compare RAW page bounds to detect panning correctly
+        val horizontalDelta = abs(pageBoundsInWindow.left - lastTriggeredBounds.left)
+        val verticalDelta = abs(pageBoundsInWindow.top - lastTriggeredBounds.top)
+        
+        if (isFlinging) {
+            delay(400)
+        } else if (horizontalDelta < 40f && verticalDelta < 40f && tileBitmapState.value != null) {
+            return@LaunchedEffect
+        } else {
+            delay(150)
+        }
 
         withContext(Dispatchers.IO) {
-            val windowRect = androidx.compose.ui.geometry.Rect(0f, 0f, viewportWidthPx.toFloat(), viewportHeightPx.toFloat())
-            val intersection = windowRect.intersect(pageBoundsInWindow)
+            val currentIntersection = windowRect.intersect(pageBoundsInWindow)
+            if (currentIntersection.isEmpty) return@withContext
 
-            if (intersection.isEmpty || intersection.width < 10 || intersection.height < 10) {
-                return@withContext
-            }
-
-            val localX = (intersection.left - pageBoundsInWindow.left) / pageBoundsInWindow.width
-            val localY = (intersection.top - pageBoundsInWindow.top) / pageBoundsInWindow.height
-            val localWidth = intersection.width / pageBoundsInWindow.width
-            val localHeight = intersection.height / pageBoundsInWindow.height
+            val localX = (currentIntersection.left - pageBoundsInWindow.left) / pageBoundsInWindow.width
+            val localY = (currentIntersection.top - pageBoundsInWindow.top) / pageBoundsInWindow.height
+            val localWidth = currentIntersection.width / pageBoundsInWindow.width
+            val localHeight = currentIntersection.height / pageBoundsInWindow.height
 
             val normalizedRect = android.graphics.RectF(localX, localY, localX + localWidth, localY + localHeight)
 
             val tile = pdfState.renderTile(
                 index = pageIndex,
-                tileWidth = intersection.width.toInt(),
-                tileHeight = intersection.height.toInt(),
+                tileWidth = currentIntersection.width.roundToInt(),
+                tileHeight = currentIntersection.height.roundToInt(),
                 normalizedRect = normalizedRect
             )
 
             if (tile != null) {
                 tileBitmapState.value = tile
                 tileRectState.value = normalizedRect
+                lastTriggeredBounds = pageBoundsInWindow // Track raw bounds
             }
         }
     }
@@ -492,7 +858,7 @@ fun PdfPageItem(
             .onGloballyPositioned { layoutCoordinates ->
                 val pos = layoutCoordinates.positionInWindow()
                 val size = layoutCoordinates.size
-                pageBoundsInWindow = androidx.compose.ui.geometry.Rect(
+                pageBoundsInWindow = Rect(
                     pos.x, pos.y, pos.x + size.width, pos.y + size.height
                 )
             }
@@ -508,15 +874,13 @@ fun PdfPageItem(
                     .fillMaxWidth()
                     .aspectRatio(aspectRatio)
             ) {
-                // Draw Tier 1 or Tier 2
                 val currentBase = base ?: thumb
                 drawImage(
                     image = currentBase.asImageBitmap(),
-                    dstSize = IntSize(size.width.toInt(), size.height.toInt()),
+                    dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
                     filterQuality = if (base != null) FilterQuality.Medium else FilterQuality.Low
                 )
                 
-                // Draw Tier 3 (HD Tile)
                 val tile = tileBitmapState.value
                 val normRect = tileRectState.value
                 if (tile != null && normRect != null) {
@@ -527,10 +891,90 @@ fun PdfPageItem(
                     
                     drawImage(
                         image = tile.asImageBitmap(),
-                        dstOffset = IntOffset(left.toInt(), top.toInt()),
-                        dstSize = IntSize(width.toInt(), height.toInt()),
+                        dstOffset = IntOffset(left.roundToInt(), top.roundToInt()),
+                        dstSize = IntSize(width.roundToInt(), height.roundToInt()),
                         filterQuality = FilterQuality.Medium
                     )
+                }
+
+                // Draw Text Selection Highlights & Handles
+                if (activeSelection != null && activeSelection.pageIndex == pageIndex) {
+                    val pageText = pdfState.pageTextCache[pageIndex]
+                    val pageSize = pdfState.pageSizes[pageIndex]
+                    if (pageText != null && pageSize != null && pageSize.width > 0 && pageSize.height > 0) {
+                        val ratioX = size.width.toFloat() / pageSize.width.toFloat()
+                        val ratioY = size.height.toFloat() / pageSize.height.toFloat()
+                        
+                        val start = min(activeSelection.startIndex, activeSelection.endIndex)
+                        val end = max(activeSelection.startIndex, activeSelection.endIndex)
+                        
+                        val selectedChars = (start..end).mapNotNull { pageText.characters.getOrNull(it) }
+                        
+                        // Group characters into lines and calculate padded bounds
+                        val lineBoundsMap = mutableMapOf<TextCharacter, android.graphics.RectF>()
+                        val lineRects = mutableListOf<android.graphics.RectF>()
+                        
+                        val lines = mutableListOf<MutableList<TextCharacter>>()
+                        for (char in selectedChars) {
+                            val rect = char.boundingBox
+                            val matchingLine = lines.find { line ->
+                                val lineRect = line.first().boundingBox
+                                val intersectTop = max(rect.top, lineRect.top)
+                                val intersectBottom = min(rect.bottom, lineRect.bottom)
+                                val overlap = intersectBottom - intersectTop
+                                overlap > (rect.height() * 0.5f)
+                            }
+                            if (matchingLine != null) {
+                                matchingLine.add(char)
+                            } else {
+                                lines.add(mutableListOf(char))
+                            }
+                        }
+
+                        for (line in lines) {
+                            val minX = line.minOf { it.boundingBox.left }
+                            val maxX = line.maxOf { it.boundingBox.right }
+                            val minY = line.minOf { it.boundingBox.top }
+                            val maxY = line.maxOf { it.boundingBox.bottom }
+                            
+                            val paddingY = (maxY - minY) * 0.35f
+                            val rect = android.graphics.RectF(minX, minY - paddingY, maxX, maxY + paddingY)
+                            lineRects.add(rect)
+                            line.forEach { lineBoundsMap[it] = rect }
+                        }
+                        
+                        val highlightColor = Color(0xFF0066CC).copy(alpha = 0.3f)
+                        for (rect in lineRects) {
+                            drawRect(
+                                color = highlightColor,
+                                topLeft = Offset(rect.left * ratioX, rect.top * ratioY),
+                                size = androidx.compose.ui.geometry.Size(rect.width() * ratioX, rect.height() * ratioY)
+                            )
+                        }
+
+                        // Draw Handles
+                        val handleColor = Color(0xFF0066CC)
+                        val startChar = pageText.characters.getOrNull(start)
+                        val endChar = pageText.characters.getOrNull(end)
+
+                        if (startChar != null) {
+                            val lineRect = lineBoundsMap[startChar]
+                            if (lineRect != null) {
+                                val x = startChar.boundingBox.left * ratioX
+                                drawLine(handleColor, Offset(x, lineRect.top * ratioY), Offset(x, lineRect.bottom * ratioY), 2.dp.toPx())
+                                drawCircle(handleColor, 6.dp.toPx(), Offset(x, lineRect.bottom * ratioY + 6.dp.toPx()))
+                            }
+                        }
+
+                        if (endChar != null) {
+                            val lineRect = lineBoundsMap[endChar]
+                            if (lineRect != null) {
+                                val x = endChar.boundingBox.right * ratioX
+                                drawLine(handleColor, Offset(x, lineRect.top * ratioY), Offset(x, lineRect.bottom * ratioY), 2.dp.toPx())
+                                drawCircle(handleColor, 6.dp.toPx(), Offset(x, lineRect.bottom * ratioY + 6.dp.toPx()))
+                            }
+                        }
+                    }
                 }
             }
         } else {
@@ -548,14 +992,18 @@ class PdfState(
     private val uri: Uri?,
     private val context: Context
 ) {
-    private var renderer: PdfRenderer? = null
-    private var fileDescriptor: ParcelFileDescriptor? = null
-    private var pdDocument: PDDocument? = null
+    var renderer: PdfRenderer? = null
+    var fileDescriptor: ParcelFileDescriptor? = null
+    var pdDocument: PDDocument? = null
     
     var pageCount by mutableStateOf(0)
     var isError by mutableStateOf(false)
+    var isLoaded by mutableStateOf(false)
+    
+    val pageSizes = mutableMapOf<Int, IntSize>()
+    val pageTextCache = mutableStateMapOf<Int, PageText>()
 
-    init {
+    fun load() {
         try {
             PDFBoxResourceLoader.init(context)
             if (uri != null) {
@@ -563,6 +1011,14 @@ class PdfState(
                 fileDescriptor?.let {
                     renderer = PdfRenderer(it)
                     pageCount = renderer?.pageCount ?: 0
+                    
+                    for (i in 0 until pageCount) {
+                        try {
+                            renderer?.openPage(i)?.use { page ->
+                                pageSizes[i] = IntSize(page.width, page.height)
+                            }
+                        } catch (e: Exception) {}
+                    }
                 }
                 
                 try {
@@ -571,6 +1027,7 @@ class PdfState(
                     }
                 } catch (e: Exception) {}
             }
+            isLoaded = true
         } catch (e: Exception) {
             isError = true
         }
@@ -595,6 +1052,7 @@ class PdfState(
                 }
                 
                 val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                bitmap.eraseColor(android.graphics.Color.WHITE) // FIX TRANSPARENCY
                 page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                 bitmap
             }
@@ -615,14 +1073,13 @@ class PdfState(
         return try {
             renderer.openPage(index).use { page ->
                 val bitmap = Bitmap.createBitmap(tileWidth, tileHeight, Bitmap.Config.ARGB_8888)
+                bitmap.eraseColor(android.graphics.Color.WHITE) // FIX TRANSPARENCY
                 val matrix = android.graphics.Matrix()
                 
-                // Scale to match the tile's density on screen
                 val scaleX = tileWidth / (normalizedRect.width() * page.width)
                 val scaleY = tileHeight / (normalizedRect.height() * page.height)
                 matrix.postScale(scaleX, scaleY)
                 
-                // Translate so the top-left of normalizedRect starts at (0,0) in bitmap
                 matrix.postTranslate(-normalizedRect.left * page.width * scaleX, -normalizedRect.top * page.height * scaleY)
                 
                 page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
@@ -642,7 +1099,7 @@ class PdfState(
             stripper.startPage = index + 1
             stripper.endPage = index + 1
             stripper.getText(doc)
-            PageText(stripper.words)
+            PageText(stripper.characters)
         } catch (e: Exception) {
             null
         }
@@ -652,45 +1109,26 @@ class PdfState(
         renderer?.close()
         fileDescriptor?.close()
         pdDocument?.close()
+        pageTextCache.clear()
+        pageSizes.clear()
     }
 }
 
-data class PageText(val words: List<TextWord>)
-data class TextWord(val text: String, val boundingBox: android.graphics.RectF)
+data class PageText(val characters: List<TextCharacter>)
+data class TextCharacter(val text: String, val boundingBox: android.graphics.RectF)
 
 class TextPositionStripper : PDFTextStripper() {
-    val words = mutableListOf<TextWord>()
-    private var currentWord = StringBuilder()
-    private var currentRect: android.graphics.RectF? = null
+    val characters = mutableListOf<TextCharacter>()
 
     override fun writeString(string: String?, textPositions: MutableList<TextPosition>?) {
         textPositions?.forEach { pos ->
-            val char = pos.unicode
-            if (char.isBlank()) {
-                if (currentWord.isNotEmpty()) {
-                    words.add(TextWord(currentWord.toString(), android.graphics.RectF(currentRect!!)))
-                    currentWord.clear()
-                    currentRect = null
-                }
-            } else {
-                val rect = android.graphics.RectF(
-                    pos.xDirAdj,
-                    pos.yDirAdj - pos.heightDir,
-                    pos.xDirAdj + pos.widthDirAdj,
-                    pos.yDirAdj
-                )
-                if (currentRect == null) {
-                    currentRect = rect
-                } else {
-                    currentRect!!.union(rect)
-                }
-                currentWord.append(char)
-            }
-        }
-        if (currentWord.isNotEmpty()) {
-            words.add(TextWord(currentWord.toString(), android.graphics.RectF(currentRect!!)))
-            currentWord.clear()
-            currentRect = null
+            val rect = android.graphics.RectF(
+                pos.xDirAdj,
+                pos.yDirAdj - pos.heightDir,
+                pos.xDirAdj + pos.widthDirAdj,
+                pos.yDirAdj
+            )
+            characters.add(TextCharacter(pos.unicode, rect))
         }
     }
 }
@@ -707,7 +1145,7 @@ fun rememberPdfState(uri: Uri?, context: Context): PdfState {
 }
 
 @Composable
-private fun PdfViewerFallback(
+fun PdfViewerFallback(
     modifier: Modifier,
     onOpenWith: () -> Unit,
     isSupported: Boolean
@@ -736,7 +1174,7 @@ private fun PdfViewerFallback(
     }
 }
 
-private fun launchOpenWith(
+fun launchOpenWith(
     context: Context,
     viewModel: DocumentViewModel,
     documentId: String
@@ -749,7 +1187,7 @@ private fun launchOpenWith(
     }
 }
 
-private fun Context.findFragmentActivity(): FragmentActivity? {
+fun Context.findFragmentActivity(): FragmentActivity? {
     var current = this
     while (current is android.content.ContextWrapper) {
         if (current is FragmentActivity) return current
@@ -758,7 +1196,6 @@ private fun Context.findFragmentActivity(): FragmentActivity? {
     return null
 }
 
-// Extension to provide standard Android fling behavior to manual scroll states
 suspend fun androidx.compose.foundation.ScrollState.fling(
     initialVelocity: Float,
     decay: androidx.compose.animation.core.DecayAnimationSpec<Float>,
@@ -785,7 +1222,6 @@ suspend fun androidx.compose.foundation.lazy.LazyListState.fling(
     }
 }
 
-// Standard pointer input helper
 suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.awaitFirstDown(
     requireUnconsumed: Boolean = true
 ): PointerInputChange {
