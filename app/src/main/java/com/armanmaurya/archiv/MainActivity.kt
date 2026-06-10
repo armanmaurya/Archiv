@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.armanmaurya.archiv.core.theme.PDFScannerTheme
-import com.armanmaurya.archiv.navigation.AppNavHost
+import com.armanmaurya.archiv.navigation.ArchivNavHost
 import com.armanmaurya.archiv.ui.settings.SettingsViewModel
 
 class MainActivity : AppCompatActivity() {
@@ -47,9 +47,10 @@ class MainActivity : AppCompatActivity() {
                 dynamicColor = settingsState.dynamicTheme,
                 pureBlack = settingsState.pureBlack
             ) {
-                AppNavHost(
+                ArchivNavHost(
                     sharedIntent = sharedIntent,
-                    onSharedIntentProcessed = { sharedIntent = SharedIntent.None }
+                    onSharedIntentProcessed = { sharedIntent = SharedIntent.None },
+                    onExit = { finish() }
                 )
             }
         }
@@ -64,6 +65,10 @@ class MainActivity : AppCompatActivity() {
         if (intent == null) return
         
         when (intent.action) {
+            Intent.ACTION_VIEW -> {
+                val uri = intent.data ?: return
+                sharedIntent = SharedIntent.Viewer(uri)
+            }
             Intent.ACTION_SEND -> {
                 val type = intent.type ?: return
                 val uri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM) ?: return

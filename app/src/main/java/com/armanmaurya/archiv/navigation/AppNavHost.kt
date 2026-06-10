@@ -45,9 +45,10 @@ inline fun <reified T : ViewModel> NavBackStackEntry.sharedViewModel(
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-fun AppNavHost(
-    sharedIntent: SharedIntent = SharedIntent.None,
-    onSharedIntentProcessed: () -> Unit = {}
+fun ArchivNavHost(
+    sharedIntent: SharedIntent,
+    onSharedIntentProcessed: () -> Unit,
+    onExit: () -> Unit
 ) {
     val navController = rememberNavController()
     val context = LocalContext.current
@@ -87,6 +88,12 @@ fun AppNavHost(
                     },
                     onOpenDocument = { documentId ->
                         navController.navigate(Screen.pdfViewerRoute(documentId)) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onOpenExternalDocument = { uri ->
+                        navController.navigate(Screen.pdfExternalViewerRoute(uri)) {
+                            popUpTo(Screen.DOCUMENTS) { inclusive = true }
                             launchSingleTop = true
                         }
                     },
@@ -231,11 +238,43 @@ fun AppNavHost(
                     ?.getString(Screen.PDF_VIEWER_DOCUMENT_ID)
                 val documentId = rawDocumentId?.let { Uri.decode(it) } ?: return@composable
 
+                val uri = documentViewModel.getDocumentFileUri(documentId) ?: return@composable
+                documentViewModel.onDocumentOpened(documentId)
+
                 PdfViewerScreen(
-                    documentId = documentId,
-                    viewModel = documentViewModel,
+                    uri = uri,
+                    title = documentId,
                     onBackClick = {
                         navController.popBackStack()
+                    }
+                )
+            }
+
+            composable(
+                route = Screen.PDF_EXTERNAL_VIEWER_ROUTE,
+                arguments = listOf(
+                    navArgument(Screen.PDF_EXTERNAL_URI) {
+                        type = NavType.StringType
+                    }
+                ),
+                enterTransition = { slideInHorizontally(initialOffsetX = { it }) },
+                exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) },
+                popEnterTransition = { slideInHorizontally(initialOffsetX = { -it }) },
+                popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) }
+            ) { backStackEntry ->
+                val rawUri = backStackEntry.arguments
+                    ?.getString(Screen.PDF_EXTERNAL_URI)
+                val uri = rawUri?.let { Uri.parse(Uri.decode(it)) } ?: return@composable
+
+                val title = com.armanmaurya.archiv.ui.viewer.getFileName(context, uri) ?: "PDF Document"
+
+                PdfViewerScreen(
+                    uri = uri,
+                    title = title,
+                    onBackClick = {
+                        if (!navController.popBackStack()) {
+                            onExit()
+                        }
                     }
                 )
             }
