@@ -18,7 +18,6 @@ litert = "1.0.1"
 litertSupport = "1.0.1"
 litertMetadata = "1.0.1"
 pdfboxAndroid = "2.0.27.0"
-pdfViewer = "1.0.0-alpha18"
 reorderable = "2.4.0"
 roomCompiler = "2.8.4"
 roomRuntime = "2.8.4"
@@ -62,7 +61,6 @@ androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-
 androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 pdfbox-android = { module = "com.tom-roush:pdfbox-android", version.ref = "pdfboxAndroid" }
-androidx-pdf-viewer-fragment = { module = "androidx.pdf:pdf-viewer-fragment", version.ref = "pdfViewer" }
 reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "roomCompiler" }
 tensorflow-lite-support = { group = "org.tensorflow", name = "tensorflow-lite-support", version.ref = "tensorflowLiteSupport" }

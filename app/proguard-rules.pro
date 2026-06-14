@@ -19,3 +19,19 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# PDFBox-Android
+-dontwarn com.gemalto.jp2.JP2Decoder
+-dontwarn org.apache.pdfbox.pdmodel.font.FileSystemFontProvider
+-dontwarn org.apache.pdfbox.pdmodel.font.FontMapperImpl
+-dontwarn org.apache.fontbox.cff.CFFFont
+-dontwarn org.apache.fontbox.util.autodetect.FontFileFinder
+-dontwarn org.bouncycastle.**
+-dontwarn org.apache.fontbox.util.autodetect.NativeFontDirFinder
+-dontwarn javax.xml.stream.**
+-dontwarn com.sun.msv.**
+-dontwarn org.relaxng.datatype.**
+-dontwarn com.tom_roush.pdfbox.pdmodel.font.FileSystemFontProvider
+-dontwarn com.tom_roush.pdfbox.pdmodel.font.FontMapperImpl
+-dontwarn com.tom_roush.fontbox.util.autodetect.FontFileFinder
+-dontwarn com.tom_roush.fontbox.util.autodetect.NativeFontDirFinder

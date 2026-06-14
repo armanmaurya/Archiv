@@ -77,6 +77,7 @@ fun DocumentsScreen(
     onOpenScanner: (List<Uri>) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenDocument: (String) -> Unit,
+    onOpenExternalDocument: (Uri) -> Unit,
     sharedTransitionScope: SharedTransitionScope? = null,
     animatedVisibilityScope: AnimatedVisibilityScope? = null
 ) {
@@ -138,6 +139,10 @@ fun DocumentsScreen(
             }
             is SharedIntent.Images -> {
                 onOpenScanner(sharedIntent.uris)
+                onSharedIntentProcessed()
+            }
+            is SharedIntent.Viewer -> {
+                onOpenExternalDocument(sharedIntent.uri)
                 onSharedIntentProcessed()
             }
             SharedIntent.None -> {}
