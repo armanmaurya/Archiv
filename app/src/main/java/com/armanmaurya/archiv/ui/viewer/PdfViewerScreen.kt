@@ -7,6 +7,8 @@ import android.content.Intent
 import android.net.Uri
 import android.graphics.Bitmap
 import android.widget.Toast
+import androidx.core.content.FileProvider
+import java.io.File
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animate
@@ -48,11 +50,15 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import android.content.res.Configuration
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
@@ -60,6 +66,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -88,6 +95,8 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
@@ -191,6 +200,15 @@ fun PdfViewerScreen(
         if (index >= 0 && index < pdfViewModel.searchResults.size) {
             val result = pdfViewModel.searchResults[index]
             zoomPanState.listState.animateScrollToItem(result.pageIndex)
+        }
+    }
+
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(pdfViewModel.isSearchActive) {
+        if (pdfViewModel.isSearchActive) {
+            delay(100)
+            focusRequester.requestFocus()
         }
     }
 
@@ -372,7 +390,7 @@ fun PdfViewerScreen(
                         onDoubleTap = { centroid ->
                             flingJob.value?.cancel()
                             coroutineScope.launch {
-                                if (zoomPanState.scale > 1.05f) {
+                                if (abs(zoomPanState.scale - 1f) > 0.05f) {
                                     zoomPanState.reset()
                                 } else {
                                     val startScale = zoomPanState.scale
@@ -485,7 +503,7 @@ fun PdfViewerScreen(
                                 val centroid = event.calculateCentroid(useCurrent = true)
 
                                 val oldScale = zoomPanState.scale
-                                zoomPanState.scale = (zoomPanState.scale * zoomChange).coerceIn(1f, 10f)
+                                zoomPanState.scale = (zoomPanState.scale * zoomChange).coerceIn(0.5f, 10f)
                                 val actualZoomFactor = zoomPanState.scale / oldScale
 
                                 val hZoomDelta = (zoomPanState.horizontalState.value + centroid.x) * (actualZoomFactor - 1)
@@ -647,9 +665,10 @@ fun PdfViewerScreen(
         }
 
         var topControlsHeightPx by remember { mutableStateOf(0) }
+        var bottomControlsHeightPx by remember { mutableStateOf(0) }
 
         AnimatedVisibility(
-            visible = pdfViewModel.isTopBarVisible && pdfViewModel.activeSelection == null,
+            visible = pdfViewModel.isTopBarVisible && pdfViewModel.activeSelection == null && !pdfViewModel.isSearchActive,
             enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
             exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut()
         ) {
@@ -675,14 +694,18 @@ fun PdfViewerScreen(
         }
 
         AnimatedVisibility(
-            visible = pdfViewModel.isTopBarVisible && pdfViewModel.activeSelection == null,
+            visible = pdfViewModel.isTopBarVisible && pdfViewModel.activeSelection == null && !pdfViewModel.isSearchActive,
             enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
             exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
-            ElevatedCard(
-                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-                modifier = Modifier.fillMaxWidth()
+            Surface(
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onGloballyPositioned { layoutCoordinates ->
+                        bottomControlsHeightPx = layoutCoordinates.size.height
+                    }
             ) {
                 Row(
                     modifier = Modifier
@@ -693,7 +716,36 @@ fun PdfViewerScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = { pdfViewModel.openSearch() }) {
-                        Icon(Icons.Default.Search, contentDescription = "Search")
+                        Icon(
+                            imageVector = Icons.Default.Search, 
+                            contentDescription = "Search",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    IconButton(onClick = {
+                        val shareUri = if (uri.scheme == "file") {
+                            FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.fileprovider",
+                                File(uri.path!!)
+                            )
+                        } else {
+                            uri
+                        }
+                        
+                        val shareIntent = Intent().apply {
+                            action = Intent.ACTION_SEND
+                            putExtra(Intent.EXTRA_STREAM, shareUri)
+                            type = "application/pdf"
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(Intent.createChooser(shareIntent, "Share PDF"))
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.Share, 
+                            contentDescription = "Share",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }
@@ -705,8 +757,8 @@ fun PdfViewerScreen(
             exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
-            ElevatedCard(
-                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            Surface(
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
                 modifier = Modifier.fillMaxWidth().imePadding()
             ) {
                 Column(
@@ -722,7 +774,9 @@ fun PdfViewerScreen(
                         TextField(
                             value = pdfViewModel.searchQuery,
                             onValueChange = { pdfViewModel.onSearchQueryChanged(it) },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .focusRequester(focusRequester),
                             placeholder = { Text("Search...") },
                             trailingIcon = {
                                 if (pdfViewModel.isSearching) {
@@ -740,7 +794,11 @@ fun PdfViewerScreen(
                         )
                         
                         IconButton(onClick = { pdfViewModel.closeSearch() }) {
-                            Icon(Icons.Default.Close, contentDescription = "Close Search")
+                            Icon(
+                                imageVector = Icons.Default.Close, 
+                                contentDescription = "Close Search",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
                     
@@ -756,10 +814,18 @@ fun PdfViewerScreen(
                                 modifier = Modifier.padding(horizontal = 8.dp)
                             )
                             IconButton(onClick = { pdfViewModel.previousSearchResult() }) {
-                                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Previous")
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowUp, 
+                                    contentDescription = "Previous",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
                             }
                             IconButton(onClick = { pdfViewModel.nextSearchResult() }) {
-                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Next")
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowDown, 
+                                    contentDescription = "Next",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
                             }
                         }
                     }
@@ -767,16 +833,23 @@ fun PdfViewerScreen(
             }
         }
         
+        val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        
         AnimatedVisibility(
-            visible = pdfViewModel.isTopBarVisible && pdfViewModel.activeSelection == null,
-            enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
-            exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut(),
+            visible = pdfViewModel.isTopBarVisible && pdfViewModel.activeSelection == null && !pdfViewModel.isSearchActive,
+            enter = (if (isLandscape) slideInVertically(initialOffsetY = { it }) else slideInHorizontally(initialOffsetX = { it })) + fadeIn(),
+            exit = (if (isLandscape) slideOutVertically(targetOffsetY = { it }) else slideOutHorizontally(targetOffsetX = { it })) + fadeOut(),
             modifier = Modifier
-                .align(Alignment.TopEnd)
+                .align(if (isLandscape) Alignment.BottomCenter else Alignment.TopEnd)
                 .padding(
-                    end = 16.dp, 
-                    top = if (topControlsHeightPx > 0) with(density) { topControlsHeightPx.toDp() } + 24.dp else 160.dp, 
-                    bottom = 48.dp
+                    end = if (isLandscape) 16.dp else 16.dp,
+                    start = if (isLandscape) 16.dp else 0.dp,
+                    top = if (isLandscape) 0.dp else if (topControlsHeightPx > 0) with(density) { topControlsHeightPx.toDp() } + 24.dp else 160.dp,
+                    bottom = if (isLandscape) {
+                        if (bottomControlsHeightPx > 0) with(density) { bottomControlsHeightPx.toDp() } + 16.dp else 80.dp
+                    } else {
+                        if (bottomControlsHeightPx > 0) with(density) { bottomControlsHeightPx.toDp() } + 24.dp else 48.dp
+                    }
                 )
         ) {
             val scrollProgress by derivedStateOf {
@@ -814,61 +887,56 @@ fun PdfViewerScreen(
                 } else 0
             }
             
-            var sliderHeightPx by remember { mutableStateOf(0) }
-            
-            Column(
-                modifier = Modifier
-                    .width(48.dp)
-                    .fillMaxHeight(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                IconButton(
-                    onClick = {
-                        coroutineScope.launch {
-                            val targetIndex = max(0, currentPage - 2)
-                            zoomPanState.listState.animateScrollToItem(targetIndex)
-                        }
-                    },
-                    modifier = Modifier
-                        .size(48.dp)
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), CircleShape)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowUp,
-                        contentDescription = "Previous page",
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
-                }
+            var sliderSizePx by remember { mutableStateOf(0) }
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), CircleShape)
-                        .padding(vertical = 16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+            if (isLandscape) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (pdfViewModel.pageCount > 0) {
-                        Text(
-                            text = "$currentPage",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(bottom = 8.dp)
+                    IconButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                val targetIndex = max(0, currentPage - 2)
+                                zoomPanState.listState.animateScrollToItem(targetIndex)
+                            }
+                        },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowLeft, 
+                            contentDescription = "Previous page",
+                            tint = MaterialTheme.colorScheme.primary
                         )
                     }
-                    
-                    Box(
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Row(
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxWidth()
-                            .onGloballyPositioned { layoutCoordinates ->
-                                sliderHeightPx = layoutCoordinates.size.height
-                            },
-                        contentAlignment = Alignment.Center
+                            .fillMaxHeight()
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), CircleShape)
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        if (sliderHeightPx > 0) {
-                            val sliderHeightDp = with(density) { sliderHeightPx.toDp() }
+                        if (pdfViewModel.pageCount > 0) {
+                            Text(
+                                text = "$currentPage",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .onGloballyPositioned { sliderSizePx = it.size.width },
+                            contentAlignment = Alignment.Center
+                        ) {
                             Slider(
                                 value = scrollProgress,
                                 onValueChange = { newValue ->
@@ -896,7 +964,6 @@ fun PdfViewerScreen(
                                 },
                                 onValueChangeFinished = { pdfViewModel.updateSliderInteraction(false) },
                                 valueRange = 0f..1f,
-                                modifier = Modifier.requiredWidth(sliderHeightDp).rotate(90f),
                                 colors = SliderDefaults.colors(
                                     thumbColor = MaterialTheme.colorScheme.primary,
                                     activeTrackColor = MaterialTheme.colorScheme.primary,
@@ -904,36 +971,156 @@ fun PdfViewerScreen(
                                 )
                             )
                         }
+
+                        if (pdfViewModel.pageCount > 0) {
+                            Text(
+                                text = "${pdfViewModel.pageCount}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
 
-                    if (pdfViewModel.pageCount > 0) {
-                        Text(
-                            text = "${pdfViewModel.pageCount}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(top = 8.dp)
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    IconButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                val targetIndex = min(pdfViewModel.pageCount - 1, currentPage)
+                                zoomPanState.listState.animateScrollToItem(targetIndex)
+                            }
+                        },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowRight, 
+                            contentDescription = "Next page",
+                            tint = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                IconButton(
-                    onClick = {
-                        coroutineScope.launch {
-                            val targetIndex = min(pdfViewModel.pageCount - 1, currentPage)
-                            zoomPanState.listState.animateScrollToItem(targetIndex)
-                        }
-                    },
+            } else {
+                Column(
                     modifier = Modifier
-                        .size(48.dp)
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), CircleShape)
+                        .width(48.dp)
+                        .fillMaxHeight(),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowDown,
-                        contentDescription = "Next page",
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
+                    IconButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                val targetIndex = max(0, currentPage - 2)
+                                zoomPanState.listState.animateScrollToItem(targetIndex)
+                            }
+                        },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowUp,
+                            contentDescription = "Previous page",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), CircleShape)
+                            .padding(vertical = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        if (pdfViewModel.pageCount > 0) {
+                            Text(
+                                text = "$currentPage",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                        }
+                        
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .onGloballyPositioned { layoutCoordinates ->
+                                    sliderSizePx = layoutCoordinates.size.height
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (sliderSizePx > 0) {
+                                val sliderHeightDp = with(density) { sliderSizePx.toDp() }
+                                Slider(
+                                    value = scrollProgress,
+                                    onValueChange = { newValue ->
+                                        pdfViewModel.updateSliderInteraction(true)
+                                        coroutineScope.launch {
+                                            val info = zoomPanState.listState.layoutInfo
+                                            val firstVisible = info.visibleItemsInfo.firstOrNull()
+                                            val size = firstVisible?.size?.coerceAtLeast(1)?.toFloat() ?: 100f
+                                            val viewportHeight = (info.viewportEndOffset - info.viewportStartOffset).toFloat()
+                                            val viewportPages = viewportHeight / size
+                                            val maxScrollablePages = max(0.001f, pdfViewModel.pageCount.toFloat() - viewportPages)
+                                            
+                                            val targetContinuousPage = newValue * maxScrollablePages
+                                            val targetIndex = targetContinuousPage.toInt().coerceIn(0, max(0, pdfViewModel.pageCount - 1))
+                                            val fraction = targetContinuousPage - targetIndex
+                                            
+                                            val pageSize = pdfViewModel.pageSizes[targetIndex]
+                                            val aspectRatio = if (pageSize != null && pageSize.height > 0) pageSize.width.toFloat() / pageSize.height else 1f / 1.414f
+                                            val renderedWidthPx = screenWidthPx * zoomPanState.scale
+                                            val estimatedHeightPx = renderedWidthPx / aspectRatio
+                                            
+                                            val targetOffsetPx = (fraction * estimatedHeightPx).toInt()
+                                            zoomPanState.listState.scrollToItem(targetIndex, targetOffsetPx)
+                                        }
+                                    },
+                                    onValueChangeFinished = { pdfViewModel.updateSliderInteraction(false) },
+                                    valueRange = 0f..1f,
+                                    modifier = Modifier.requiredWidth(sliderHeightDp).rotate(90f),
+                                    colors = SliderDefaults.colors(
+                                        thumbColor = MaterialTheme.colorScheme.primary,
+                                        activeTrackColor = MaterialTheme.colorScheme.primary,
+                                        inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
+                                    )
+                                )
+                            }
+                        }
+
+                        if (pdfViewModel.pageCount > 0) {
+                            Text(
+                                text = "${pdfViewModel.pageCount}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    IconButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                val targetIndex = min(pdfViewModel.pageCount - 1, currentPage)
+                                zoomPanState.listState.animateScrollToItem(targetIndex)
+                            }
+                        },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Next page",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
         }
@@ -1167,10 +1354,13 @@ fun PdfPageItem(
                                 val maxX = line.maxOf { it.boundingBox.right }
                                 val minY = line.minOf { it.boundingBox.top }
                                 val maxY = line.maxOf { it.boundingBox.bottom }
+                                
+                                val paddingY = (maxY - minY) * 0.15f
+                                
                                 drawRect(
                                     color = highlightColor,
-                                    topLeft = Offset(minX * ratioX, minY * ratioY),
-                                    size = androidx.compose.ui.geometry.Size((maxX - minX) * ratioX, (maxY - minY) * ratioY)
+                                    topLeft = Offset(minX * ratioX, (minY - paddingY) * ratioY),
+                                    size = androidx.compose.ui.geometry.Size((maxX - minX) * ratioX, (maxY - minY + 2 * paddingY) * ratioY)
                                 )
                             }
                         }
