@@ -271,6 +271,7 @@ fun ArchivNavHost(
                 PdfViewerScreen(
                     uri = uri,
                     title = title,
+                    isExternal = true,
                     onBackClick = {
                         if (!navController.popBackStack()) {
                             onExit()

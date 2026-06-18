@@ -96,6 +96,12 @@ interface DocumentDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(document: DocumentEntity)
 
+    @Query("SELECT * FROM documents WHERE id = :documentId")
+    suspend fun getById(documentId: String): DocumentEntity?
+
+    @Query("SELECT * FROM documents WHERE fileName = :fileName AND fileSizeBytes = :fileSize")
+    suspend fun getByFileNameAndSize(fileName: String, fileSize: Long): DocumentEntity?
+
     @Query("UPDATE documents SET lastOpenedAtMillis = :timestamp WHERE id = :documentId")
     suspend fun updateLastOpened(documentId: String, timestamp: Long)
 

@@ -145,7 +145,7 @@ class DocumentRepository(context: Context) {
         var importedCount = 0
         var failedCount = 0
         for (uri in uris) {
-            val imported = runCatching { importSinglePdf(uri) }.isSuccess
+            val imported = runCatching { importDocument(uri) }.isSuccess
             if (imported) {
                 importedCount++
             } else {
@@ -265,7 +265,7 @@ class DocumentRepository(context: Context) {
             ?: throw FileNotFoundException("Document not found.")
     }
 
-    private suspend fun importSinglePdf(uri: Uri) {
+    suspend fun importDocument(uri: Uri) {
         val resolver = appContext.contentResolver
         val displayName = getDisplayName(resolver, uri) ?: uri.lastPathSegment
         val desiredName = displayName ?: buildDefaultPdfName()
@@ -286,6 +286,10 @@ class DocumentRepository(context: Context) {
 
         val documentEntity = outputFile.toDocumentEntity(lastOpenedAtMillis = System.currentTimeMillis())
         documentDao.upsert(documentEntity)
+    }
+
+    suspend fun isDocumentSaved(fileName: String, fileSize: Long): Boolean {
+        return documentDao.getByFileNameAndSize(fileName, fileSize) != null
     }
 
     private fun getDisplayName(resolver: android.content.ContentResolver, uri: Uri): String? {

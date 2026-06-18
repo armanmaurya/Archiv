@@ -30,6 +30,10 @@ import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import com.armanmaurya.archiv.data.repository.DocumentRepository
 import kotlinx.coroutines.delay
 
 data class TextSelection(
@@ -75,7 +79,9 @@ class TextPositionStripper : PDFTextStripper() {
     }
 }
 
-class PdfViewerViewModel : ViewModel() {
+class PdfViewerViewModel(
+    private val repository: DocumentRepository
+) : ViewModel() {
 
     // UI States
     var isTopBarVisible by mutableStateOf(false)
@@ -87,6 +93,14 @@ class PdfViewerViewModel : ViewModel() {
     var isInteractingWithSlider by mutableStateOf(false)
         private set
     var activeSelection by mutableStateOf<TextSelection?>(null)
+        private set
+
+    // External Document States
+    var isExternalDocument by mutableStateOf(false)
+        private set
+    var isAlreadySaved by mutableStateOf(false)
+        private set
+    var isSaving by mutableStateOf(false)
         private set
 
     // Search States
@@ -186,6 +200,25 @@ class PdfViewerViewModel : ViewModel() {
         }
     }
 
+    fun saveExternalDocument(context: Context, uri: Uri, onComplete: () -> Unit) {
+        if (isSaving || isAlreadySaved) return
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            isSaving = true
+            try {
+                repository.importDocument(uri)
+                isAlreadySaved = true
+                withContext(Dispatchers.Main) {
+                    onComplete()
+                }
+            } catch (e: Exception) {
+                // handle error
+            } finally {
+                isSaving = false
+            }
+        }
+    }
+
     private fun performSearch(query: String) {
         if (query.isBlank()) {
             searchResults = emptyList()
@@ -242,13 +275,16 @@ class PdfViewerViewModel : ViewModel() {
         }
     }
 
-    fun loadDocument(uri: Uri?, context: Context) {
+    fun loadDocument(uri: Uri?, context: Context, isExternal: Boolean = false) {
         if (isLoaded || isError) return
+        isExternalDocument = isExternal
         
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 PDFBoxResourceLoader.init(context)
                 if (uri != null) {
+                    val fileName = getFileName(context, uri)
+                    
                     // Copy to temp file for random access loading (more memory efficient)
                     val tempFile = File(context.cacheDir, "temp_viewer_${System.currentTimeMillis()}.pdf")
                     context.contentResolver.openInputStream(uri)?.use { input ->
@@ -257,6 +293,12 @@ class PdfViewerViewModel : ViewModel() {
                         }
                     }
                     tempPdfFile = tempFile
+
+                    val fileSize = tempFile.length()
+                    
+                    if (isExternal && fileName != null) {
+                        isAlreadySaved = repository.isDocumentSaved(fileName, fileSize)
+                    }
 
                     // Use the temp file for PdfRenderer (more stable than direct Uri access)
                     val pfd = ParcelFileDescriptor.open(tempFile, ParcelFileDescriptor.MODE_READ_ONLY)
@@ -442,5 +484,15 @@ class PdfViewerViewModel : ViewModel() {
         _pageLinksCache.clear()
         _pageSizes.clear()
         inFlightExtractions.clear()
+    }
+
+    companion object {
+        fun factory(context: Context): ViewModelProvider.Factory = viewModelFactory {
+            initializer {
+                PdfViewerViewModel(
+                    repository = DocumentRepository(context.applicationContext)
+                )
+            }
+        }
     }
 }

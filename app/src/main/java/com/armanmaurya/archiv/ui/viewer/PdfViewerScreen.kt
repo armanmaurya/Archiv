@@ -57,6 +57,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
@@ -161,7 +162,8 @@ fun rememberPdfZoomPanState(
 fun PdfViewerScreen(
     uri: Uri,
     title: String,
-    pdfViewModel: PdfViewerViewModel = viewModel(),
+    isExternal: Boolean = false,
+    pdfViewModel: PdfViewerViewModel = viewModel(factory = PdfViewerViewModel.factory(LocalContext.current)),
     onBackClick: () -> Unit
 ) {
     val context = LocalContext.current
@@ -182,7 +184,7 @@ fun PdfViewerScreen(
     }
 
     LaunchedEffect(uri) {
-        pdfViewModel.loadDocument(uri = uri, context = context)
+        pdfViewModel.loadDocument(uri = uri, context = context, isExternal = isExternal)
     }
 
     val haptic = LocalHapticFeedback.current
@@ -681,7 +683,30 @@ fun PdfViewerScreen(
             ) {
                 TopBar(
                     title = title,
-                    onBackClick = onBackClick
+                    onBackClick = onBackClick,
+                    actions = {
+                        if (pdfViewModel.isExternalDocument && !pdfViewModel.isAlreadySaved) {
+                            if (pdfViewModel.isSaving) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp).padding(4.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            } else {
+                                IconButton(onClick = {
+                                    pdfViewModel.saveExternalDocument(context, uri) {
+                                        Toast.makeText(context, "Saved to Archiv", Toast.LENGTH_SHORT).show()
+                                    }
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Save,
+                                        contentDescription = "Save to Archiv",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+                    }
                 )
                 BrightnessSlider(
                     manualBrightness = pdfViewModel.manualBrightness,
