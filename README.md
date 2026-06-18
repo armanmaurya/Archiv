@@ -73,10 +73,7 @@ Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct
 Archiv uses the following open-source libraries:
 
 - [Android Jetpack Libraries](https://developer.android.com/jetpack) (Compose, Room, CameraX, Lifecycle, Navigation, etc.)
-- [OpenCV](https://opencv.org/) - Open Source Computer Vision Library.
 - [LiteRT](https://ai.google.dev/edge/litert) - A cross-platform runtime for on-device AI.
-- [PDFBox-Android](https://github.com/TomRoush/PdfBox-Android) - A port of Apache PDFBox for Android.
-- [Reorderable](https://github.com/calvinconcept/reorderable) - Drag-and-drop reordering for Jetpack Compose.
 
 ## Related Projects
 
