@@ -23,10 +23,10 @@ with fast search speed, tagging, importing and sharing directly.
 ## Screenshots
 
 <div align="center">
-  <img width="23%" src="fastlane/metadata/android/en-US/images/phoneScreenshots/4.jpg" alt="Settings Screen">
-  <img width="23%" src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.jpg" alt="Documents Screen">
-  <img width="23%" src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.jpg" alt="Scanner Screen">
-  <img width="23%" src="fastlane/metadata/android/en-US/images/phoneScreenshots/3.jpg" alt="Editor Screen">
+  <img width="23%" src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" alt="Settings Screen">
+  <img width="23%" src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.png" alt="Documents Screen">
+  <img width="23%" src="fastlane/metadata/android/en-US/images/phoneScreenshots/3.png" alt="Scanner Screen">
+  <img width="23%" src="fastlane/metadata/android/en-US/images/phoneScreenshots/4.png" alt="Editor Screen">
 </div>
 
 ## Tech Stack
