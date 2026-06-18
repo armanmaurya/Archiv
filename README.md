@@ -11,6 +11,11 @@ with fast search speed, tagging, importing and sharing directly.
 
 ---
 
+## Download
+
+[<img src="https://f-droid.org/badge/get-it-on.png" alt="Get it on F-Droid" height="80">](https://f-droid.org/packages/com.armanmaurya.archiv/)
+[<img src="https://github.com/machiav3lli/oandbackupx/blob/034b226cea5c1b30eb4f6a6f313e4dadcbb0ece4/badge_github.png" alt="Get it on GitHub" height="80">](https://github.com/armanmaurya/Archiv/releases/latest/)
+
 ## Features
 
 - **High-Quality Scanning**: Capture documents with precision and ML-powered corner detection.
@@ -56,6 +61,12 @@ To build Archiv from source, ensure you have the latest version of Android Studi
 Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are greatly appreciated.
 
 Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
+
+## Contributors
+
+<a href="https://github.com/armanmaurya/Archiv/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=armanmaurya/Archiv" alt="Archiv Contributors"/>
+</a>
 
 ## Open Source Libraries
 
