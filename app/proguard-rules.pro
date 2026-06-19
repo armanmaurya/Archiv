@@ -35,3 +35,8 @@
 -dontwarn com.tom_roush.pdfbox.pdmodel.font.FontMapperImpl
 -dontwarn com.tom_roush.fontbox.util.autodetect.FontFileFinder
 -dontwarn com.tom_roush.fontbox.util.autodetect.NativeFontDirFinder
+
+# TensorFlow Lite / LiteRT
+-keep class org.tensorflow.lite.** { *; }
+-keep class com.google.ai.edge.litert.** { *; }
+-keep class com.google.android.gms.tflite.** { *; }
