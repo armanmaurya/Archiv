@@ -4,36 +4,56 @@ import android.content.Intent
 import com.armanmaurya.archiv.core.theme.AppTheme
 import com.armanmaurya.archiv.core.theme.toAppTheme
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.MergeType
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Brightness4
 import androidx.compose.material.icons.filled.Contrast
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.StarRate
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.armanmaurya.archiv.R
 import com.armanmaurya.archiv.ui.settings.components.ExpandableItem
@@ -46,17 +66,78 @@ import com.armanmaurya.archiv.ui.settings.components.ToggleItem
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
+    backupViewModel: BackupViewModel,
     onBackClick: () -> Unit,
     onAboutClick: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
 
     // UI-only state for expand/collapse
     var themeExpanded by remember { mutableStateOf(false) }
     var languageExpanded by remember { mutableStateOf(false) }
+    var conflictExpanded by remember { mutableStateOf(false) }
+
+    // File picker for export (system save dialog)
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri: Uri? ->
+        uri?.let { backupViewModel.exportBackup(it) }
+    }
+
+    // File picker for import
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let { backupViewModel.importBackup(context, it) }
+    }
+
+    // Handle export events
+    val exportEvent = backupViewModel.exportEvent
+    LaunchedEffect(exportEvent) {
+        exportEvent?.let { event ->
+            when (event) {
+                is BackupExportEvent.Success ->
+                    snackbarHostState.showSnackbar("Backup saved (${event.documentCount} docs).")
+                is BackupExportEvent.Error ->
+                    snackbarHostState.showSnackbar(event.message)
+            }
+            backupViewModel.consumeExportEvent()
+        }
+    }
+
+    // Handle import events
+    val importEvent = backupViewModel.importEvent
+    LaunchedEffect(importEvent) {
+        importEvent?.let { event ->
+            when (event) {
+                is BackupImportEvent.Success -> {
+                    val msg = buildString {
+                        append("Imported ${event.imported}")
+                        if (event.skipped > 0) append(", skipped ${event.skipped}")
+                        if (event.failed > 0) append(", failed ${event.failed}")
+                        append(".")
+                    }
+                    snackbarHostState.showSnackbar(msg)
+                }
+                is BackupImportEvent.Error ->
+                    snackbarHostState.showSnackbar(event.message)
+            }
+            backupViewModel.consumeImportEvent()
+        }
+    }
+
+    if (backupViewModel.isExporting || backupViewModel.isImporting) {
+        ProgressDialog(
+            isExporting = backupViewModel.isExporting,
+            onCancel = { backupViewModel.cancelOperation() }
+        )
+    }
 
     Scaffold(
-        topBar = { SettingsTopBar(onBackClick) }
+        topBar = { SettingsTopBar(onBackClick) },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -80,6 +161,23 @@ fun SettingsScreen(
                 languageExpanded = languageExpanded,
                 onToggleLanguageExpanded = { languageExpanded = !languageExpanded },
                 onSetLanguage = viewModel::setAppLanguage
+            )
+            DataBackupSection(
+                uiState = uiState,
+                isExporting = backupViewModel.isExporting,
+                isImporting = backupViewModel.isImporting,
+                conflictExpanded = conflictExpanded,
+                onToggleConflictExpanded = { conflictExpanded = !conflictExpanded },
+                onExport = {
+                    val suggestedName = "archiv-backup-${SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())}.archiv"
+                    exportLauncher.launch(suggestedName)
+                },
+                onImport = {
+                    importLauncher.launch(
+                        arrayOf("application/octet-stream", "application/zip", "*/*")
+                    )
+                },
+                onSetConflictStrategy = viewModel::setImportConflictStrategy
             )
             AboutSection(onAboutClick)
         }
@@ -206,6 +304,90 @@ private fun AboutSection(onAboutClick: () -> Unit) {
             onClick = onAboutClick,
             icon = Icons.Default.Info
         )
+    }
+}
+
+@Composable
+private fun DataBackupSection(
+    uiState: SettingsUiState,
+    isExporting: Boolean,
+    isImporting: Boolean,
+    conflictExpanded: Boolean,
+    onToggleConflictExpanded: () -> Unit,
+    onExport: () -> Unit,
+    onImport: () -> Unit,
+    onSetConflictStrategy: (String) -> Unit
+) {
+    val conflictOptions = listOf(
+        "SKIP" to "Skip — keep the existing file",
+        "RENAME" to "Rename — add a suffix (_1, _2…)",
+        "OVERWRITE" to "Overwrite — replace the existing file"
+    )
+    Section(title = "Data & Backup") {
+        Item(
+            title = if (isExporting) "Exporting…" else "Export Backup",
+            subtitle = "Save all documents to a .archiv file",
+            onClick = { if (!isExporting) onExport() },
+            icon = Icons.Default.FileUpload
+        )
+        Item(
+            title = if (isImporting) "Importing…" else "Import Backup",
+            subtitle = "Restore from a .archiv file",
+            onClick = { if (!isImporting) onImport() },
+            icon = Icons.Default.FileDownload
+        )
+        ExpandableItem(
+            title = "On Conflict",
+            subtitle = conflictOptions.find { it.first == uiState.importConflictStrategy }?.second
+                ?: "Rename — add a suffix (_1, _2…)",
+            isExpanded = conflictExpanded,
+            onToggle = onToggleConflictExpanded,
+            icon = Icons.AutoMirrored.Filled.MergeType
+        ) {
+            conflictOptions.forEach { (key, label) ->
+                OptionItem(
+                    label = label,
+                    isSelected = uiState.importConflictStrategy == key,
+                    onClick = {
+                        onSetConflictStrategy(key)
+                        onToggleConflictExpanded()
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProgressDialog(
+    isExporting: Boolean,
+    onCancel: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = { /* Cannot dismiss by clicking outside */ },
+        properties = DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false
+        )
+    ) {
+        Card(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(24.dp)
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                CircularProgressIndicator()
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(text = if (isExporting) "Exporting Backup…" else "Importing Backup…")
+                Spacer(modifier = Modifier.height(24.dp))
+                TextButton(onClick = onCancel) {
+                    Text("Cancel")
+                }
+            }
+        }
     }
 }
 

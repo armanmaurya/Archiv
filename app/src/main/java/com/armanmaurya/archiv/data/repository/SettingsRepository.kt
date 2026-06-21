@@ -37,6 +37,9 @@ class SettingsRepository(
     val documentSort: Flow<String> = dataStore
         .getOrDefault(key = DOCUMENT_SORT, default = "NAME_ASC")
 
+    val importConflictStrategy: Flow<String> = dataStore
+        .getOrDefault(key = IMPORT_CONFLICT_STRATEGY, default = "RENAME")
+
     suspend fun setAppTheme(theme: String) {
         dataStore.setOrUpdate(key = APP_THEME, value = theme)
     }
@@ -61,6 +64,10 @@ class SettingsRepository(
         dataStore.setOrUpdate(key = DOCUMENT_SORT, value = sort)
     }
 
+    suspend fun setImportConflictStrategy(strategy: String) {
+        dataStore.setOrUpdate(key = IMPORT_CONFLICT_STRATEGY, value = strategy)
+    }
+
     private companion object PreferencesKeys {
         val APP_THEME = stringPreferencesKey("app_theme")
         val PURE_BLACK = booleanPreferencesKey("pure_black")
@@ -68,6 +75,7 @@ class SettingsRepository(
         val APP_LANGUAGE = stringPreferencesKey("app_language")
         val DOCUMENT_LIST_GRID_VIEW = booleanPreferencesKey("document_list_grid_view")
         val DOCUMENT_SORT = stringPreferencesKey("document_sort")
+        val IMPORT_CONFLICT_STRATEGY = stringPreferencesKey("import_conflict_strategy")
     }
 }
 

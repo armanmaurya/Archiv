@@ -107,4 +107,8 @@ interface DocumentDao {
 
     @Query("DELETE FROM documents WHERE id = :documentId")
     suspend fun deleteById(documentId: String)
+
+    @Transaction
+    @Query("SELECT * FROM documents ORDER BY fileName COLLATE NOCASE ASC")
+    suspend fun getAll(): List<DocumentWithTags>
 }

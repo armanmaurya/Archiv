@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.armanmaurya.archiv.data.repository.SettingsRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -17,7 +18,8 @@ data class SettingsUiState(
     val appTheme: String = "System",
     val pureBlack: Boolean = false,
     val dynamicTheme: Boolean = true,
-    val appLanguage: String = "System"
+    val appLanguage: String = "System",
+    val importConflictStrategy: String = "RENAME"
 )
 
 class SettingsViewModel(
@@ -27,10 +29,23 @@ class SettingsViewModel(
     val uiState = combine(
         settingsRepository.appTheme,
         settingsRepository.pureBlack,
-        settingsRepository.dynamicTheme,
-        settingsRepository.appLanguage,
-        ::SettingsUiState
-    ).stateIn(
+        settingsRepository.dynamicTheme
+    ) { theme, pure, dynamic ->
+        Triple(theme, pure, dynamic)
+    }.combine(
+        combine(
+            settingsRepository.appLanguage,
+            settingsRepository.importConflictStrategy
+        ) { lang, conflict -> lang to conflict }
+    ) { (theme, pure, dynamic), (lang, conflict) ->
+        SettingsUiState(
+            appTheme = theme,
+            pureBlack = pure,
+            dynamicTheme = dynamic,
+            appLanguage = lang,
+            importConflictStrategy = conflict
+        )
+    }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = SettingsUiState()
@@ -63,6 +78,12 @@ class SettingsViewModel(
                 LocaleListCompat.forLanguageTags(language)
             }
             AppCompatDelegate.setApplicationLocales(appLocale)
+        }
+    }
+
+    fun setImportConflictStrategy(strategy: String) {
+        viewModelScope.launch {
+            settingsRepository.setImportConflictStrategy(strategy)
         }
     }
 

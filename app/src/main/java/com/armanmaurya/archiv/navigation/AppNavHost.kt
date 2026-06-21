@@ -28,6 +28,7 @@ import com.armanmaurya.archiv.ui.scanner.EditorScreen
 import com.armanmaurya.archiv.ui.document.DocumentsScreen
 import com.armanmaurya.archiv.ui.document.DocumentViewModel
 import com.armanmaurya.archiv.ui.settings.AboutScreen
+import com.armanmaurya.archiv.ui.settings.BackupViewModel
 import com.armanmaurya.archiv.ui.settings.SettingsScreen
 import com.armanmaurya.archiv.ui.settings.SettingsViewModel
 import com.armanmaurya.archiv.ui.viewer.PdfViewerScreen
@@ -193,9 +194,13 @@ fun ArchivNavHost(
                 val settingsViewModel: SettingsViewModel = viewModel(
                     factory = SettingsViewModel.factory(context)
                 )
+                val backupViewModel: BackupViewModel = viewModel(
+                    factory = BackupViewModel.factory(context)
+                )
 
                 SettingsScreen(
                     viewModel = settingsViewModel,
+                    backupViewModel = backupViewModel,
                     onBackClick = {
                         navController.popBackStack()
                     },
