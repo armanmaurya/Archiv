@@ -15,11 +15,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
@@ -222,148 +220,59 @@ fun DocumentsScreen(
                             )
                         }
                     } else {
-                        AnimatedContent(
-                            targetState = isGridView == true,
-                            transitionSpec = {
-                                (slideInVertically(initialOffsetY = { -it }) + fadeIn()).togetherWith(
-                                    slideOutVertically(targetOffsetY = { it }) + fadeOut()
-                                )
-                            },
+                        val columns = if (isGridView == true) GridCells.Adaptive(minSize = 180.dp) else GridCells.Fixed(1)
+                        LazyVerticalGrid(
+                            columns = columns,
                             modifier = Modifier.fillMaxSize(),
-                            label = "viewModeTransition"
-                        ) { gridView ->
-                            if (!gridView) {
-                                LazyColumn(
+                            contentPadding = PaddingValues(
+                                start = 12.dp,
+                                end = 12.dp,
+                                top = 8.dp,
+                                bottom = 132.dp
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(
+                                count = documents.size,
+                                key = { index -> documents[index].id }
+                            ) { index ->
+                                val document = documents[index]
+                                DocumentItem(
+                                    document = document,
+                                    actionEnabled = !viewModel.isLoading,
+                                    compact = isGridView == true,
+                                    onOpen = {
+                                        viewModel.onDocumentOpened(document.id)
+                                        onOpenDocument(document.id)
+                                    },
+                                    onOpenWith = {
+                                        viewModel.onDocumentOpened(document.id)
+                                        openWithExternal(document.id)
+                                    },
+                                    onShare = {
+                                        val shareIntent = viewModel.createShareIntent(document.id)
+                                        if (shareIntent != null) {
+                                            context.startActivity(Intent.createChooser(shareIntent, "Share scan"))
+                                        }
+                                    },
+                                    onExport = {
+                                        if (requiresLegacyWritePermission() && !hasLegacyWritePermission(context)) {
+                                            pendingExportDocumentId = document.id
+                                            exportPermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                                        } else {
+                                            viewModel.exportDocument(document.id)
+                                        }
+                                    },
+                                    onDelete = { pendingDeleteDocumentId = document.id },
+                                    onEditTags = { pendingTagDocument = document },
+                                    onRename = { pendingRenameDocument = document },
+                                    onTagClick = { tag -> viewModel.toggleTagFilter(tag) },
+                                    selectedTags = selectedTags,
                                     modifier = Modifier
-                                        .fillMaxSize(),
-                                    contentPadding = PaddingValues(
-                                        start = 12.dp,
-                                        end = 12.dp,
-                                        top = 8.dp,
-                                        bottom = 132.dp
-                                    ),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    items(
-                                        documents,
-                                        key = { document -> document.id }
-                                    ) { document ->
-                                        DocumentItem(
-                                            document = document,
-                                            actionEnabled = !viewModel.isLoading,
-                                            compact = false,
-                                            onOpen = {
-                                                viewModel.onDocumentOpened(document.id)
-                                                onOpenDocument(document.id)
-                                            },
-                                            onOpenWith = {
-                                                viewModel.onDocumentOpened(document.id)
-                                                openWithExternal(document.id)
-                                            },
-                                            onShare = {
-                                                val shareIntent =
-                                                    viewModel.createShareIntent(document.id)
-                                                if (shareIntent != null) {
-                                                    context.startActivity(
-                                                        Intent.createChooser(
-                                                            shareIntent,
-                                                            "Share scan"
-                                                        )
-                                                    )
-                                                }
-                                            },
-                                            onExport = {
-                                                if (requiresLegacyWritePermission() &&
-                                                    !hasLegacyWritePermission(context)
-                                                ) {
-                                                    pendingExportDocumentId = document.id
-                                                    exportPermissionLauncher.launch(
-                                                        Manifest.permission.WRITE_EXTERNAL_STORAGE
-                                                    )
-                                                } else {
-                                                    viewModel.exportDocument(document.id)
-                                                }
-                                            },
-                                            onDelete = { pendingDeleteDocumentId = document.id },
-                                            onEditTags = {
-                                                pendingTagDocument = document
-                                            },
-                                            onRename = {
-                                                pendingRenameDocument = document
-                                            },
-                                            onTagClick = { tag -> viewModel.toggleTagFilter(tag) },
-                                            selectedTags = selectedTags,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .animateItem()
-                                        )
-                                    }
-                                }
-                            } else {
-                                LazyVerticalGrid(
-                                    columns = GridCells.Adaptive(minSize = 180.dp),
-                                    modifier = Modifier
-                                        .fillMaxSize(),
-                                    contentPadding = PaddingValues(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 132.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    items(
-                                        count = documents.size,
-                                        key = { index -> documents[index].id }
-                                    ) { index ->
-                                        val document = documents[index]
-                                        DocumentItem(
-                                            document = document,
-                                            actionEnabled = !viewModel.isLoading,
-                                            compact = true,
-                                            onOpen = {
-                                                viewModel.onDocumentOpened(document.id)
-                                                onOpenDocument(document.id)
-                                            },
-                                            onOpenWith = {
-                                                viewModel.onDocumentOpened(document.id)
-                                                openWithExternal(document.id)
-                                            },
-                                            onShare = {
-                                                val shareIntent =
-                                                    viewModel.createShareIntent(document.id)
-                                                if (shareIntent != null) {
-                                                    context.startActivity(
-                                                        Intent.createChooser(
-                                                            shareIntent,
-                                                            "Share scan"
-                                                        )
-                                                    )
-                                                }
-                                            },
-                                            onExport = {
-                                                if (requiresLegacyWritePermission() &&
-                                                    !hasLegacyWritePermission(context)
-                                                ) {
-                                                    pendingExportDocumentId = document.id
-                                                    exportPermissionLauncher.launch(
-                                                        Manifest.permission.WRITE_EXTERNAL_STORAGE
-                                                    )
-                                                } else {
-                                                    viewModel.exportDocument(document.id)
-                                                }
-                                            },
-                                            onDelete = { pendingDeleteDocumentId = document.id },
-                                            onEditTags = {
-                                                pendingTagDocument = document
-                                            },
-                                            onRename = {
-                                                pendingRenameDocument = document
-                                            },
-                                            onTagClick = { tag -> viewModel.toggleTagFilter(tag) },
-                                            selectedTags = selectedTags,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .animateItem()
-                                        )
-                                    }
-                                }
+                                        .fillMaxWidth()
+                                        .animateItem()
+                                )
                             }
                         }
                     }
