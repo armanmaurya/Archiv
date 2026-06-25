@@ -177,11 +177,11 @@ class DocumentViewModel(
                     }
 
                     result.failed > 0 -> {
-                        infoMessage = "Imported ${'$'}{result.imported} PDFs, failed ${'$'}{result.failed}."
+                        infoMessage = "Imported ${result.imported} PDFs, failed ${result.failed}."
                     }
 
                     else -> {
-                        infoMessage = "Imported ${'$'}{result.imported} PDFs."
+                        infoMessage = "Imported ${result.imported} PDFs."
                     }
                 }
             } catch (error: SecurityException) {

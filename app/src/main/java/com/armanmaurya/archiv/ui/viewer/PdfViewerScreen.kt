@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -575,40 +576,47 @@ fun PdfViewerScreen(
                     .horizontalScroll(zoomPanState.horizontalState, enabled = false)
                     .onGloballyPositioned { zoomPanState.listPositionInWindow = it.positionInWindow() }
             ) {
-                if (pdfViewModel.isLoaded && pdfViewModel.pageCount > 0) {
-                    LazyColumn(
-                        state = zoomPanState.listState,
-                        userScrollEnabled = false,
-                        modifier = Modifier
-                            .width(screenWidth * zoomPanState.scale)
-                            .fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        items(pdfViewModel.pageCount) { pageIndex ->
-                            PdfPageItem(
-                                pageIndex = pageIndex,
-                                pdfViewModel = pdfViewModel,
-                                scale = zoomPanState.scale,
-                                isFlinging = isFlinging,
-                                viewportWidthPx = screenWidthPx,
-                                viewportHeightPx = screenHeightPx
-                            )
-                            if (pageIndex < pdfViewModel.pageCount - 1) {
-                                Spacer(modifier = Modifier.height(8.dp * zoomPanState.scale))
+                Box(
+                    modifier = Modifier
+                        .defaultMinSize(minWidth = screenWidth)
+                        .fillMaxHeight(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (pdfViewModel.isLoaded && pdfViewModel.pageCount > 0) {
+                        LazyColumn(
+                            state = zoomPanState.listState,
+                            userScrollEnabled = false,
+                            modifier = Modifier
+                                .requiredWidth(screenWidth * zoomPanState.scale)
+                                .fillMaxHeight(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            items(pdfViewModel.pageCount) { pageIndex ->
+                                PdfPageItem(
+                                    pageIndex = pageIndex,
+                                    pdfViewModel = pdfViewModel,
+                                    scale = zoomPanState.scale,
+                                    isFlinging = isFlinging,
+                                    viewportWidthPx = screenWidthPx,
+                                    viewportHeightPx = screenHeightPx
+                                )
+                                if (pageIndex < pdfViewModel.pageCount - 1) {
+                                    Spacer(modifier = Modifier.height(8.dp * zoomPanState.scale))
+                                }
                             }
                         }
-                    }
-                } else if (pdfViewModel.isError) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Unable to load PDF",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                    } else if (pdfViewModel.isError) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Unable to load PDF",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
             }
@@ -1380,7 +1388,7 @@ fun PdfPageItem(
                                 val minY = line.minOf { it.boundingBox.top }
                                 val maxY = line.maxOf { it.boundingBox.bottom }
                                 
-                                val paddingY = (maxY - minY) * 0.15f
+                                val paddingY = (maxY - minY) * 0.35f
                                 
                                 drawRect(
                                     color = highlightColor,

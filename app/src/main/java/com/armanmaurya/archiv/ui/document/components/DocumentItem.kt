@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.GetApp
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
@@ -152,18 +153,18 @@ fun DocumentItem(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        IconButton(onClick = onDelete, enabled = actionEnabled) {
+                        IconButton(onClick = onEditTags, enabled = actionEnabled) {
                             Icon(
-                                Icons.Filled.Delete,
-                                contentDescription = "Delete",
+                                Icons.Filled.LocalOffer,
+                                contentDescription = "Tags",
                                 modifier = Modifier.size(18.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        TagOverflowMenu(
+                        DocumentOverflowMenu(
                             onOpenWith = onOpenWith,
-                            onEditTags = onEditTags,
                             onRename = onRename,
+                            onDelete = onDelete,
                             enabled = actionEnabled
                         )
                     }
@@ -227,18 +228,18 @@ fun DocumentItem(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        IconButton(onClick = onDelete, enabled = actionEnabled) {
+                        IconButton(onClick = onEditTags, enabled = actionEnabled) {
                             Icon(
-                                Icons.Filled.Delete,
-                                contentDescription = "Delete",
+                                Icons.Filled.LocalOffer,
+                                contentDescription = "Tags",
                                 modifier = Modifier.size(18.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        TagOverflowMenu(
+                        DocumentOverflowMenu(
                             onOpenWith = onOpenWith,
-                            onEditTags = onEditTags,
                             onRename = onRename,
+                            onDelete = onDelete,
                             enabled = actionEnabled
                         )
                     }
@@ -318,10 +319,10 @@ private fun TagChip(
 }
 
 @Composable
-private fun TagOverflowMenu(
+private fun DocumentOverflowMenu(
     onOpenWith: () -> Unit,
-    onEditTags: () -> Unit,
     onRename: () -> Unit = {},
+    onDelete: () -> Unit = {},
     enabled: Boolean
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -349,17 +350,17 @@ private fun TagOverflowMenu(
                 }
             )
             DropdownMenuItem(
-                text = { Text(stringResource(R.string.document_tags_title)) },
-                onClick = {
-                    menuExpanded = false
-                    onEditTags()
-                }
-            )
-            DropdownMenuItem(
                 text = { Text("Rename") },
                 onClick = {
                     menuExpanded = false
                     onRename()
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Delete") },
+                onClick = {
+                    menuExpanded = false
+                    onDelete()
                 }
             )
         }

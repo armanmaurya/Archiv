@@ -398,7 +398,7 @@ class DocumentRepository(context: Context) {
         var candidate = File(directory, "$baseName.$extension")
         var index = 1
         while (candidate.exists()) {
-            candidate = File(directory, "${'$'}{baseName}_$index.$extension")
+            candidate = File(directory, "${baseName}_$index.$extension")
             index++
         }
         return candidate

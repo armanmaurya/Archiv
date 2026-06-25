@@ -94,7 +94,6 @@ fun ArchivSearchBar(
     // This Box reserves the full area including status bar,
     // so the pill can animate upward into it
     Box(
-
         modifier = modifier
             .fillMaxWidth()
             .padding(top = animatedStatusBarHeight), // animate into status bar

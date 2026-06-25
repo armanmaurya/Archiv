@@ -189,7 +189,7 @@ fun DocumentsScreen(
             )
         }
     ) { innerPadding ->
-        Column(modifier = Modifier.fillMaxWidth().padding(innerPadding)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(innerPadding).padding(top = 8.dp)) {
             TagStrip(
                 modifier = Modifier
                     .fillMaxWidth(),
