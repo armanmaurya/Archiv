@@ -36,9 +36,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.FlipCameraAndroid
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -51,6 +53,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -79,6 +82,7 @@ import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 @Composable
@@ -221,6 +225,7 @@ fun CameraPreview(
     isAutoEdgeDetectionEnabled: Boolean,
     isAutoCaptureEnabled: Boolean = false,
     onAutoCapture: () -> Unit = {},
+    onProgressChange: (Float) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -244,6 +249,7 @@ fun CameraPreview(
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var camera by remember { mutableStateOf<Camera?>(null) }
     var isTorchOn by remember { mutableStateOf(false) }
+    var lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
     var detectedCorners by remember { mutableStateOf<List<PointF>?>(null) }
     var frozenPreviewFrame by remember { mutableStateOf<Bitmap?>(null) }
 
@@ -259,12 +265,23 @@ fun CameraPreview(
         frozenPreviewFrame = null
     }
 
-    // AUTO-CAPTURE DISABLED
-    // LaunchedEffect(autoCaptureProgress) {
-    //     if (autoCaptureProgress >= 1f && isAutoCaptureEnabled) {
-    //         onAutoCapture()
-    //     }
-    // }
+    var isCooldown by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isCooldown) {
+        if (isCooldown) {
+            delay(3000)
+            isCooldown = false
+        }
+    }
+
+    LaunchedEffect(autoCaptureProgress) {
+        if (autoCaptureProgress >= 1f && isAutoCaptureEnabled && !isCooldown) {
+            onAutoCapture()
+            isCooldown = true
+            autoCaptureProgress = 0f
+            onProgressChange(0f)
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -287,7 +304,7 @@ fun CameraPreview(
         }
     }
 
-    LaunchedEffect(previewView, lifecycleOwner, hasCameraPermission, isAutoEdgeDetectionEnabled) {
+    LaunchedEffect(previewView, lifecycleOwner, hasCameraPermission, isAutoEdgeDetectionEnabled, lensFacing) {
         val targetPreviewView = previewView
         if (!hasCameraPermission || targetPreviewView == null) {
             imageCapture = null
@@ -306,9 +323,15 @@ fun CameraPreview(
             analyzerExecutor = analyzerExecutor,
             previewView = targetPreviewView,
             autoEdgeDetectionEnabled = isAutoEdgeDetectionEnabled,
+            lensFacing = lensFacing,
             onImageCaptureReady = { captureUseCase -> imageCapture = captureUseCase },
             onCameraReady = { boundCamera -> camera = boundCamera },
-            onStabilityProgress = { _ -> /* AUTO-CAPTURE DISABLED */ },
+            onStabilityProgress = { progress -> 
+                if (!isCooldown) {
+                    autoCaptureProgress = progress
+                    onProgressChange(progress)
+                }
+            },
             onCornersUpdated = { corners, aspect, bmp ->
                 if (corners != null && aspect != null) {
                     detectedCorners = corners
@@ -439,6 +462,7 @@ fun CameraPreview(
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
+                    .statusBarsPadding()
                     .padding(top = 16.dp, end = 16.dp)
                     .size(44.dp)
                     .clip(androidx.compose.foundation.shape.CircleShape)
@@ -459,26 +483,50 @@ fun CameraPreview(
             }
         }
 
+        // Camera flip button — left of torch
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .statusBarsPadding()
+                .padding(top = 16.dp, end = 72.dp)
+                .size(44.dp)
+                .clip(androidx.compose.foundation.shape.CircleShape)
+                .background(Color.Black.copy(alpha = 0.45f))
+                .clickable {
+                    lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK) {
+                        CameraSelector.LENS_FACING_FRONT
+                    } else {
+                        CameraSelector.LENS_FACING_BACK
+                    }
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.FlipCameraAndroid,
+                contentDescription = "Flip camera",
+                tint = Color.White,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+
         SearchingIndicator(
             isVisible = isAutoEdgeDetectionEnabled && detectedCorners == null && frozenPreviewFrame == null,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
 
-        // AUTO-CAPTURE DISABLED
-        // if (isAutoCaptureEnabled && autoCaptureProgress > 0f) {
-        //     AutoCaptureProgressArc(
-        //         progress = autoCaptureProgress,
-        //         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 80.dp)
-        //     )
-        // }
     }
 }
 
 @Composable
-private fun AutoCaptureProgressArc(
+fun AutoCaptureProgressArc(
     progress: Float,
     modifier: Modifier = Modifier
 ) {
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress,
+        animationSpec = tween(durationMillis = 200),
+        label = "progressAnimation"
+    )
     val color = MaterialTheme.colorScheme.primary
     Canvas(modifier = modifier.size(56.dp)) {
         drawArc(
@@ -491,7 +539,7 @@ private fun AutoCaptureProgressArc(
         drawArc(
             color = color,
             startAngle = -90f,
-            sweepAngle = 360f * progress,
+            sweepAngle = 360f * animatedProgress,
             useCenter = false,
             style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round)
         )
@@ -505,6 +553,7 @@ private fun bindCameraPreview(
     analyzerExecutor: ExecutorService,
     previewView: PreviewView,
     autoEdgeDetectionEnabled: Boolean,
+    lensFacing: Int,
     onImageCaptureReady: (ImageCapture) -> Unit,
     onCameraReady: (Camera) -> Unit,
     onStabilityProgress: (Float) -> Unit,
@@ -638,9 +687,10 @@ private fun bindCameraPreview(
 
             try {
                 cameraProvider.unbindAll()
+                val cameraSelector = CameraSelector.Builder().requireLensFacing(lensFacing).build()
                 val boundCamera = cameraProvider.bindToLifecycle(
                     lifecycleOwner,
-                    CameraSelector.DEFAULT_BACK_CAMERA,
+                    cameraSelector,
                     *useCases.toTypedArray()
                 )
                 ContextCompat.getMainExecutor(context).execute {

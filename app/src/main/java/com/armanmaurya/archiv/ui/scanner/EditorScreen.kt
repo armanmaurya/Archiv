@@ -326,41 +326,25 @@ fun EditorScreen (
             }
         }
 
-        TextButton(
-            onClick = ::handleTopAction,
-            enabled = !viewModel.isSavingPdf,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(top = 24.dp, end = 16.dp)
-                .height(topChipHeight)
-                .clip(RoundedCornerShape(50))
-                .background(topChipColor),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
-            colors = ButtonDefaults.textButtonColors(
-                contentColor = topChipContentColor
-            )
-        ) {
-            when {
-                viewModel.isSavingPdf -> {
-                    CircularProgressIndicator(
-                        color = topChipContentColor,
-                        strokeWidth = 2.dp,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                mode != Mode.DEFAULT -> {
-                    Text(
-                        text = "Done",
-                        style = topChipTextStyle
-                    )
-                }
-                else -> {
-                    Text(
-                        text = "Save",
-                        style = topChipTextStyle
-                    )
-                }
+        if (mode != Mode.DEFAULT) {
+            TextButton(
+                onClick = ::handleTopAction,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(top = 24.dp, end = 16.dp)
+                    .height(topChipHeight)
+                    .clip(RoundedCornerShape(50))
+                    .background(topChipColor),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = topChipContentColor
+                )
+            ) {
+                Text(
+                    text = "Done",
+                    style = topChipTextStyle
+                )
             }
         }
 

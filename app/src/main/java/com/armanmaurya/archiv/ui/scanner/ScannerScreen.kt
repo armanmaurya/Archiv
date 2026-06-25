@@ -24,10 +24,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -38,6 +40,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -55,6 +58,7 @@ import com.armanmaurya.archiv.bitmap.decodeSampledBitmap
 import com.armanmaurya.archiv.data.repository.DocumentRepository
 import com.armanmaurya.archiv.ml.corners.DocCornerDetector
 import com.armanmaurya.archiv.ml.corners.DocCornerTFLiteRunner
+import com.armanmaurya.archiv.ui.scanner.components.AutoCaptureProgressArc
 import com.armanmaurya.archiv.ui.scanner.components.CameraPreview
 import com.armanmaurya.archiv.ui.scanner.components.GalleryButton
 import com.armanmaurya.archiv.ui.scanner.components.ThumbnailStrip
@@ -89,10 +93,12 @@ fun ScannerScreen(
     var openLastRequestToken by remember { mutableStateOf(0L) }
     var scannerErrorMessage by remember { mutableStateOf<String?>(null) }
     var isImportBusy by remember { mutableStateOf(false) }
+    var autoCaptureProgress by remember { mutableFloatStateOf(0f) }
+    var scannerMode by remember { mutableStateOf(ScannerMode.AUTO) }
+    val isAutoEdgeDetectionEnabled = scannerMode != ScannerMode.OFF
     var isCameraBusy by remember { mutableStateOf(false) }
-    var isAutoEdgeDetectionEnabled by remember { mutableStateOf(true) }
     val isScreenBusy = viewModel.isSavingPdf || isImportBusy || isCameraBusy
-    val isAutoCaptureEnabled = isAutoEdgeDetectionEnabled && !isScreenBusy
+    val isAutoCaptureEnabled = scannerMode == ScannerMode.AUTO && !isScreenBusy
 
     val visibleErrorMessage = scannerErrorMessage ?: viewModel.saveErrorMessage
 
@@ -226,8 +232,28 @@ fun ScannerScreen(
                 isAutoEdgeDetectionEnabled = isAutoEdgeDetectionEnabled,
                 isAutoCaptureEnabled = isAutoCaptureEnabled,
                 onAutoCapture = { captureRequestKey++ },
+                onProgressChange = { autoCaptureProgress = it },
                 modifier = Modifier.fillMaxSize()
             )
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(top = 16.dp, start = 16.dp)
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .clickable(enabled = !isScreenBusy) { handleExitAttempt() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = "Back",
+                    tint = Color.White,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
         }
 
         // Bottom controls
@@ -257,10 +283,31 @@ fun ScannerScreen(
                 modifier = sharedShutterModifier
             )
 
-            AutoEdgeDetectionButton(
-                isEnabled = isAutoEdgeDetectionEnabled,
-                onToggle = { isAutoEdgeDetectionEnabled = !isAutoEdgeDetectionEnabled }
-            )
+            Box(contentAlignment = Alignment.Center) {
+                if (isAutoCaptureEnabled) {
+                    if (autoCaptureProgress == 0f) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(64.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 5.dp
+                        )
+                    } else {
+                        AutoCaptureProgressArc(
+                            progress = autoCaptureProgress,
+                            modifier = Modifier.size(64.dp)
+                        )
+                    }
+                }
+                ScannerModeButton(
+                    mode = scannerMode,
+                    onToggle = {
+                        scannerMode = when (scannerMode) {
+                            ScannerMode.AUTO -> ScannerMode.OFF
+                            ScannerMode.OFF -> ScannerMode.AUTO
+                        }
+                    }
+                )
+            }
         }
 
         Row(
@@ -354,19 +401,24 @@ fun ScannerScreen(
     }
 }
 
+enum class ScannerMode(val label: String) {
+    AUTO("Auto"),
+    OFF("Off")
+}
+
 @Composable
-fun AutoEdgeDetectionButton(
-    isEnabled: Boolean,
+fun ScannerModeButton(
+    mode: ScannerMode,
     onToggle: () -> Unit,
     enabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
-    val backgroundColor = if (isEnabled) {
+    val backgroundColor = if (mode != ScannerMode.OFF) {
         MaterialTheme.colorScheme.secondaryContainer
     } else {
         MaterialTheme.colorScheme.surfaceVariant
     }
-    val textColor = if (isEnabled) {
+    val textColor = if (mode != ScannerMode.OFF) {
         MaterialTheme.colorScheme.onSecondaryContainer
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
@@ -380,7 +432,7 @@ fun AutoEdgeDetectionButton(
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = if (isEnabled) "Auto" else "Off",
+            text = mode.label,
             color = textColor,
             fontSize = 11.sp
         )
@@ -393,13 +445,14 @@ fun ShutterButton(
     enabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    val buttonColor = MaterialTheme.colorScheme.onBackground
     Box(
         modifier = modifier
             .size(80.dp)
-            .border(3.dp, Color.White, CircleShape)
+            .border(3.dp, buttonColor, CircleShape)
             .padding(8.dp)
             .clip(CircleShape)
-            .background(Color.White)
+            .background(buttonColor)
             .clickable(enabled = enabled) { onCapture() }
     )
 }

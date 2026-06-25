@@ -218,9 +218,7 @@ fun EditorPage(
                 label = "dismissY"
             )
 
-            val targetDismissScale = if (dismissOffset == Offset.Zero) 1f else {
-                (1f - (dismissOffset.getDistance() / 1500f)).coerceIn(0.7f, 1f)
-            }
+            val targetDismissScale = 1f
             val animatedDismissScale by animateFloatAsState(
                 targetValue = targetDismissScale,
                 animationSpec = if (isDismissDragging) snap() else spring(),
