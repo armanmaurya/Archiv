@@ -17,3 +17,11 @@ local.properties
 .vscode
 build.log
 build2.log
+
+# IDE Files
+.idea/
+
+# Machine Learning Models
+*.tflite
+*.onnx
+*.ort
